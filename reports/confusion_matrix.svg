@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="520" viewBox="0 0 720 520">
+<rect width="720" height="520" fill="#ffffff"/>
+<text x="360" y="48" text-anchor="middle" font-family="Segoe UI, Arial" font-size="26" font-weight="700" fill="#111827">Confusion Matrix</text>
+<text x="320" y="110" text-anchor="middle" font-family="Segoe UI, Arial" font-size="16" font-weight="600" fill="#374151">Predicted Benign</text>
+<text x="530" y="110" text-anchor="middle" font-family="Segoe UI, Arial" font-size="16" font-weight="600" fill="#374151">Predicted Malicious</text>
+<text x="130" y="230" text-anchor="middle" font-family="Segoe UI, Arial" font-size="16" font-weight="600" fill="#374151">Actual Benign</text>
+<text x="130" y="380" text-anchor="middle" font-family="Segoe UI, Arial" font-size="16" font-weight="600" fill="#374151">Actual Malicious</text>
+<rect x="220" y="155" width="200" height="140" rx="8" fill="rgb(105,113,255)" stroke="#d1d5db"/><text x="320" y="227" text-anchor="middle" font-size="36" font-weight="700" fill="#ffffff">223</text><rect x="430" y="155" width="200" height="140" rx="8" fill="rgb(238,246,255)" stroke="#d1d5db"/><text x="530" y="227" text-anchor="middle" font-size="36" font-weight="700" fill="#111827">11</text><rect x="220" y="305" width="200" height="140" rx="8" fill="rgb(229,237,255)" stroke="#d1d5db"/><text x="320" y="377" text-anchor="middle" font-size="36" font-weight="700" fill="#111827">25</text><rect x="430" y="305" width="200" height="140" rx="8" fill="rgb(100,108,255)" stroke="#d1d5db"/><text x="530" y="377" text-anchor="middle" font-size="36" font-weight="700" fill="#ffffff">231</text>
+<text x="320" y="325" text-anchor="middle" font-family="Segoe UI, Arial" font-size="13" fill="#374151">True Negative</text>
+<text x="530" y="325" text-anchor="middle" font-family="Segoe UI, Arial" font-size="13" fill="#374151">False Positive</text>
+<text x="320" y="475" text-anchor="middle" font-family="Segoe UI, Arial" font-size="13" fill="#374151">False Negative</text>
+<text x="530" y="475" text-anchor="middle" font-family="Segoe UI, Arial" font-size="13" fill="#374151">True Positive</text>
+</svg>

@@ -1,0 +1,37 @@
+   MODEL EVALUATION RESULTS
+============================================================
+  Accuracy  : 92.65%
+  Loss      : 0.2389
+  Precision : 95.45%
+  Recall    : 90.23%
+  F1-Score  : 92.77%
+============================================================
+
+  Confusion Matrix:
+                        Predicted Benign  Predicted Malicious
+  Actual Benign               223                 11         
+  Actual Malicious             25                 231        
+
+  Classification Report:
+              precision    recall  f1-score   support
+
+      Benign       0.90      0.95      0.93       234
+   Malicious       0.95      0.90      0.93       256
+
+    accuracy                           0.93       490
+   macro avg       0.93      0.93      0.93       490
+weighted avg       0.93      0.93      0.93       490
+
+============================================================
+  EARLY DETECTION EVALUATION
+============================================================
+Window             Samples      Acc     Prec   Recall       F1      FPR
+First 10 calls         490   49.18%   52.52%   28.52%   36.96%   28.21%
+First 20 calls         490   54.29%   58.70%   42.19%   49.09%   32.48%
+First 30 calls         490   56.12%   60.62%   45.70%   52.12%   32.48%
+First 50 calls         480   70.21%   70.85%   75.00%   72.87%   35.27%
+First 75 calls         477   75.68%   74.14%   83.98%   78.75%   33.94%
+First 100 calls        474   91.56%   95.71%   88.14%   91.77%    4.52%
+First 150 calls         36   55.56%  100.00%   15.79%   27.27%    0.00%
+Full log               490   92.65%   95.45%   90.23%   92.77%    4.70%
+============================================================

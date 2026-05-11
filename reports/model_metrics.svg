@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="500" viewBox="0 0 720 500">
+<rect width="720" height="500" fill="#ffffff"/>
+<text x="360" y="48" text-anchor="middle" font-family="Segoe UI, Arial" font-size="26" font-weight="700" fill="#111827">Model Performance Metrics</text>
+<line x1="70" y1="405" x2="650" y2="405" stroke="#9ca3af"/>
+<line x1="70" y1="105" x2="70" y2="405" stroke="#9ca3af"/>
+<text x="55" y="110" text-anchor="end" font-size="12" fill="#6b7280">100%</text>
+<text x="55" y="260" text-anchor="end" font-size="12" fill="#6b7280">50%</text>
+<text x="55" y="410" text-anchor="end" font-size="12" fill="#6b7280">0%</text>
+<rect x="105" y="127.0" width="80" height="278.0" rx="6" fill="#2563eb"/><text x="145" y="115.0" text-anchor="middle" font-size="16" font-weight="700" fill="#111827">92.65%</text><text x="145" y="435" text-anchor="middle" font-size="15" fill="#374151">Accuracy</text><rect x="245" y="118.6" width="80" height="286.4" rx="6" fill="#2563eb"/><text x="285" y="106.6" text-anchor="middle" font-size="16" font-weight="700" fill="#111827">95.45%</text><text x="285" y="435" text-anchor="middle" font-size="15" fill="#374151">Precision</text><rect x="385" y="134.3" width="80" height="270.7" rx="6" fill="#2563eb"/><text x="425" y="122.3" text-anchor="middle" font-size="16" font-weight="700" fill="#111827">90.23%</text><text x="425" y="435" text-anchor="middle" font-size="15" fill="#374151">Recall</text><rect x="525" y="126.7" width="80" height="278.3" rx="6" fill="#2563eb"/><text x="565" y="114.7" text-anchor="middle" font-size="16" font-weight="700" fill="#111827">92.77%</text><text x="565" y="435" text-anchor="middle" font-size="15" fill="#374151">F1-Score</text>
+</svg>

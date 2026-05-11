@@ -1,0 +1,27 @@
+# Python generated files
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Runtime output
+logs/*
+!logs/.gitkeep
+quarantine/*
+!quarantine/.gitkeep
+threat_database.db
+
+# Local environment
+.env
+.venv/
+venv/
+env/
+
+# Editor and OS files
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+
+# Local backups
+*.backup.docx
+*.backup.pptx
