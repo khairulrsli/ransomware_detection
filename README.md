@@ -14,17 +14,17 @@ Important wording: this project observes behavioural events and process activity
 
 ## Core Features
 
-| Feature | Description |
-|---|---|
-| VM-based malware testing | Intended to run inside a dedicated Windows VM with snapshots enabled. |
-| PE file validation | Checks executable structure before analysis. |
-| Behavioural monitoring | Observes process, file-system, CPU, memory, child-process, canary-file, and network indicators. |
-| Early detection mechanism | Can terminate suspicious runs based on rapid writes, high entropy files, canary violations, shadow-copy activity, and high risk score. |
-| LSTM prediction | Classifies event sequences using a trained TensorFlow/Keras model. |
-| Multi-signal scoring | Combines ML score, early-window prediction, and runtime behavioural indicators. |
-| Quarantine system | Moves detected threats into `quarantine/` and records them in SQLite. |
-| Statistics dashboard | Shows scan history, detection counts, and recent analysis records. |
-| Unit tests | Includes focused tests for preprocessing statistics and database behaviour. |
+| Feature                   | Description                                                                                                                                                                                                                    |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| VM-based malware testing  | Intended to run inside a dedicated Windows VM with snapshots enabled. The Python runner supervises execution; it does not provide containment by itself.                                                                       |
+| PE file validation        | Checks executable structure before analysis.                                                                                                                                                                                   |
+| Behavioural monitoring    | Observes process, file-system, CPU, memory, child-process, canary-file, and network indicators.                                                                                                                                |
+| Early detection mechanism | Can terminate suspicious runs based on rapid writes, high entropy files, canary violations, shadow-copy activity, and high risk score.                                                                                         |
+| LSTM prediction           | Classifies event sequences using a trained TensorFlow/Keras model.                                                                                                                                                             |
+| Multi-signal scoring      | Combines ML score, early-window prediction, and runtime behavioural indicators. The current app verdict threshold is `APP_DETECTION_THRESHOLD = 0.35` and should be recalibrated when the dataset or scoring weights change. |
+| Quarantine system         | Moves detected threats into `quarantine/` and records them in SQLite.                                                                                                                                                        |
+| Statistics dashboard      | Shows scan history, detection counts, and recent analysis records.                                                                                                                                                             |
+| Unit tests                | Includes focused tests for preprocessing statistics and database behaviour.                                                                                                                                                    |
 
 ---
 
@@ -39,12 +39,12 @@ The training pipeline uses CSV files from `data/raw/benign/` and `data/raw/ranso
 
 Current regenerated model results from `model/evaluation_results.txt`:
 
-| Metric | Value |
-|---|---:|
-| Accuracy | 92.65% |
+| Metric    |  Value |
+| --------- | -----: |
+| Accuracy  | 92.65% |
 | Precision | 95.45% |
-| Recall | 90.23% |
-| F1-score | 92.77% |
+| Recall    | 90.23% |
+| F1-score  | 92.77% |
 
 Confusion matrix:
 
@@ -70,7 +70,7 @@ Installer-name context check
 (does not skip analysis)
         |
         v
-Execution inside isolated Windows VM
+Execution through the VM analysis runner
         |
         v
 Process-level behavioural monitoring
@@ -126,16 +126,17 @@ python -m unittest discover -s tests
 ## GUI Tabs
 
 1. **Analysis**
+
    - Select one executable file.
    - Run behavioural analysis inside the VM.
    - View behavioural metrics, ML score, threat score, and final verdict.
-
 2. **Statistics**
+
    - View scan count, ransomware count, benign count, average confidence, and recent history.
    - Export analysis history as CSV.
    - Clear history and reset aggregate statistics.
-
 3. **Quarantine**
+
    - View quarantined files.
    - Permanently delete quarantined files.
 
@@ -146,7 +147,7 @@ python -m unittest discover -s tests
 ```text
 app/
   main.py              GUI and main workflow
-  sandbox_runner.py    Process launch and timeout control
+  sandbox_runner.py    VM analysis runner: process launch and timeout control
   behavior_logger.py   Runtime behaviour monitoring and early triggers
   preprocessing.py     Tokenisation, padding, and event statistics
   early_detection.py   Partial-sequence LSTM checks
@@ -173,6 +174,8 @@ quarantine/
 tests/
   test_preprocessing.py
   test_threat_database.py
+  test_behavior_logger.py
+  test_static_hardening.py
 ```
 
 ---
@@ -197,5 +200,6 @@ Recommended VM precautions:
 - Behaviour logging uses process and filesystem observation, not full Windows API hooking.
 - File-change monitoring can be affected by unrelated activity inside watched directories.
 - Early detection before 100 calls is currently much weaker than full-log classification.
+- The app's composite threshold is a prototype operating point, not a formally calibrated production threshold.
 - The current model is evaluated on the included dataset; broader validation with more real-world ransomware families is recommended.
 - Results should be presented as prototype findings, not production antivirus performance.

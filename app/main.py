@@ -22,6 +22,8 @@ PARENT_DIR = os.path.dirname(APP_DIR)
 MODEL_DIR  = os.path.join(PARENT_DIR, "model")
 MODEL_PATH = os.path.join(MODEL_DIR, "trained_model.h5")
 LOG_FILE   = os.path.join(PARENT_DIR, "logs", "api_logs.csv")
+APP_DETECTION_THRESHOLD = 0.35
+ML_ALERT_THRESHOLD = 0.5
 
 # ── WHITELIST ──────────────────────────────────────────────────────────────────
 LEGITIMATE_INSTALLERS = {
@@ -329,7 +331,7 @@ def analyze_in_thread(file_path):
         file_size = os.path.getsize(file_path) / 1024
 
         run_on_ui(current_file.set, f"{file_name}\n({file_size:.1f} KB)", wait=True)
-        run_on_ui(set_progress, "Executing in sandbox...", 10, "10% - Running sandbox", wait=True)
+        run_on_ui(set_progress, "Executing in VM analysis runner...", 10, "10% - Running VM runner", wait=True)
         run_on_ui(result_var.set, "", wait=True)
         run_on_ui(result_label.config, bg="#f0f1f4", fg="#6b7280", wait=True)
         run_on_ui(delete_btn.pack_forget, wait=True)
@@ -347,36 +349,28 @@ def analyze_in_thread(file_path):
             return
 
         if behavior_logger.early_termination_triggered:
-            status_var.set("Early termination — threat detected fast!")
-            progress_var.set(60)
-            progress_text_var.set("60% - Early threat detected")
-            root.update()
+            run_on_ui(set_progress, "Early termination - threat detected fast!", 60,
+                      "60% - Early threat detected", wait=True)
 
-        status_var.set("Analyzing behavioral logs...")
-        progress_var.set(50)
-        progress_text_var.set("50% - Processing logs")
-        root.update()
+        run_on_ui(set_progress, "Analyzing behavioral logs...", 50,
+                  "50% - Processing logs", wait=True)
 
         df = pd.read_csv(LOG_FILE)
         if len(df) == 0 or "event" not in df.columns:
-            _show_benign("No activity detected", "BENIGN", "N/A")
-            metrics_text.config(state="normal")
-            metrics_text.delete("1.0", "end")
-            metrics_text.insert("end",
+            run_on_ui(_show_benign, "No activity detected", "BENIGN", "N/A", wait=True)
+            run_on_ui(set_text_widget, metrics_text,
                 "No behavioral events recorded.\n"
                 "File appears benign or exited too quickly.\n"
-            )
-            metrics_text.config(state="disabled")
+            , wait=True)
             return
 
         # LSTM prediction with enhanced early detection
         events = read_events_from_log(LOG_FILE)
-        early_result = predict_early_windows(model, events, windows=DEFAULT_WINDOWS, threshold=0.5)
+        early_result = predict_early_windows(model, events, windows=DEFAULT_WINDOWS, threshold=ML_ALERT_THRESHOLD)
         prediction   = early_result["final_score"]
 
-        progress_var.set(75)
-        progress_text_var.set("75% - Multi-Signal Fusion")
-        root.update()
+        run_on_ui(progress_var.set, 75, wait=True)
+        run_on_ui(progress_text_var.set, "75% - Multi-Signal Fusion", wait=True)
 
         # ── WEIGHTED MULTI-SIGNAL FUSION ─────────────────────────────────
         composite, threat_level, signals, metrics = compute_threat_score(
@@ -388,14 +382,13 @@ def analyze_in_thread(file_path):
         busy_loops   = metrics['busy_loops']
         network_ops  = metrics['network_ops']
 
-        # Detection threshold: composite >= 0.35 triggers ransomware verdict
-        is_ransomware = composite >= 0.35
+        # Detection threshold: composite >= APP_DETECTION_THRESHOLD triggers ransomware verdict.
+        # Keep this named because it requires calibration when datasets change.
+        is_ransomware = composite >= APP_DETECTION_THRESHOLD
 
         if is_ransomware:
-            status_var.set("Terminating malicious process...")
-            progress_var.set(85)
-            progress_text_var.set("85% - Responding to threat")
-            root.update()
+            run_on_ui(set_progress, "Terminating malicious process...", 85,
+                      "85% - Responding to threat", wait=True)
 
             terminated = kill_process_tree(file_path)
             time.sleep(1)
@@ -404,9 +397,7 @@ def analyze_in_thread(file_path):
             if quarantined:
                 db.add_quarantine(file_name, quarantine_path, file_path, threat_level)
 
-            metrics_text.config(state="normal")
-            metrics_text.delete("1.0", "end")
-            metrics_text.insert("end",
+            run_on_ui(set_text_widget, metrics_text,
                 f"Threat Score : {composite:.3f} ({threat_level})\n"
                 f"ML Score     : {prediction:.3f}\n\n"
                 f"Write Ops    : {write_ops}\n"
@@ -417,8 +408,7 @@ def analyze_in_thread(file_path):
                 f"Canary Hits  : {metrics.get('canary_violations', 0)}\n\n"
                 f"Terminated   : {len(terminated)} processes\n"
                 f"Status       : {'Quarantined' if quarantined else 'Not quarantined'}\n"
-            )
-            metrics_text.config(state="disabled")
+            , wait=True)
 
             if quarantined and quarantine_path:
                 def _delete_permanently(qpath=quarantine_path, fname=file_name):
@@ -430,12 +420,13 @@ def analyze_in_thread(file_path):
                         messagebox.showinfo("Deleted", f"{fname} permanently deleted.")
                     except Exception as e:
                         messagebox.showerror("Error", f"Could not delete: {e}")
-                delete_btn.config(
+                run_on_ui(delete_btn.config,
                     state="normal",
                     text="DELETE PERMANENTLY",
-                    command=_delete_permanently
+                    command=_delete_permanently,
+                    wait=True
                 )
-                delete_btn.pack(pady=8, fill="x", padx=5)
+                run_on_ui(delete_btn.pack, pady=8, fill="x", padx=5, wait=True)
 
             if early_result["earliest_alert_window"] is not None:
                 reason = (f"Early detection at call {early_result['earliest_alert_window']} "
@@ -444,44 +435,39 @@ def analyze_in_thread(file_path):
                 reason = f"Threat score {composite:.3f} ({threat_level})"
             reason = installer_note + reason
 
-            result_var.set(f"RANSOMWARE DETECTED")
-            result_label.config(bg=DANGER_COLOR, fg="white")
-            confidence_var.set(f"Score: {composite*100:.1f}% | {threat_level}")
-            status_var.set(f"Complete: {reason}")
-            status_label.config(fg=DANGER_COLOR)
+            run_on_ui(result_var.set, "RANSOMWARE DETECTED", wait=True)
+            run_on_ui(result_label.config, bg=DANGER_COLOR, fg="white", wait=True)
+            run_on_ui(confidence_var.set, f"Score: {composite*100:.1f}% | {threat_level}", wait=True)
+            run_on_ui(status_var.set, f"Complete: {reason}", wait=True)
+            run_on_ui(status_label.config, fg=DANGER_COLOR, wait=True)
             action = "QUARANTINED" if quarantined else "ALERTED"
-            add_history_entry(file_name, "RANSOMWARE", f"{composite*100:.1f}%")
+            run_on_ui(add_history_entry, file_name, "RANSOMWARE", f"{composite*100:.1f}%", wait=True)
             db.add_analysis(file_name, "RANSOMWARE", composite, prediction,
                 {'write_ops': write_ops, 'rapid_writes': rapid_writes,
                  'busy_loops': busy_loops, 'network_ops': network_ops},
                 action, reason)
 
         else:
-            metrics_text.config(state="normal")
-            metrics_text.delete("1.0", "end")
-            metrics_text.insert("end",
+            run_on_ui(set_text_widget, metrics_text,
                 f"Score        : {composite:.3f} (SAFE)\n"
                 f"ML Score     : {prediction:.3f}\n\n"
                 f"Write Ops    : {write_ops}\n"
                 f"Busy Loops   : {busy_loops}\n"
                 f"Network Conn : {network_ops}\n\n"
                 f"FILE SAFE\n"
-            )
-            metrics_text.config(state="disabled")
-            _show_benign("Normal application behavior", "BENIGN", f"{composite*100:.1f}%")
+            , wait=True)
+            run_on_ui(_show_benign, "Normal application behavior", "BENIGN", f"{composite*100:.1f}%", wait=True)
             db.add_analysis(file_name, "BENIGN FILE", composite, prediction,
                 {'write_ops': write_ops, 'rapid_writes': rapid_writes,
                  'busy_loops': busy_loops, 'network_ops': network_ops},
                 "NONE", installer_note + "Normal behavior")
 
-        progress_var.set(100)
-        progress_text_var.set("100% - Complete")
+        run_on_ui(progress_var.set, 100, wait=True)
+        run_on_ui(progress_text_var.set, "100% - Complete", wait=True)
 
     except Exception as e:
-        messagebox.showerror("Error", f"Analysis failed: {str(e)}")
-        status_var.set("Error during analysis")
-        progress_var.set(0)
-        progress_text_var.set("Failed")
+        run_on_ui(messagebox.showerror, "Error", f"Analysis failed: {str(e)}", wait=True)
+        run_on_ui(set_progress, "Error during analysis", 0, "Failed", wait=True)
 
 
 def _show_benign(reason, history_verdict, history_conf):
@@ -508,7 +494,8 @@ def start_analysis():
     if not is_valid:
         messagebox.showerror("Invalid File", f"File validation failed:\n\n{msg}")
         return
-    root.after(0, analyze_in_thread, file_path)
+    worker = threading.Thread(target=analyze_in_thread, args=(file_path,), daemon=True)
+    worker.start()
 
 
 def add_history_entry(filename, verdict, confidence):

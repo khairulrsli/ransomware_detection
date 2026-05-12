@@ -8,15 +8,17 @@ import behavior_logger
 
 def run_in_sandbox(exe_path):
     """
-    Launch the target executable in a restricted sandbox environment.
+    Launch the target executable inside the VM analysis runner.
 
-    Protections applied:
+    Runner controls applied:
       1. CREATE_SUSPENDED — process starts frozen, giving the logger time to attach
       2. CREATE_NO_WINDOW — suppresses cmd/console popups
       3. SW_HIDE via STARTUPINFO — hides any GUI windows the process tries to show
-      4. Job Object — prevents child process spawning from escaping monitoring
-      5. Below-normal priority — limits CPU impact on the VM
-      6. Aggressive kill loop — checks every 250ms for early termination
+      4. Below-normal priority — limits CPU impact on the VM
+      5. Aggressive kill loop — checks every 250ms for early termination
+
+    This is process supervision, not a containment boundary. The VM provides
+    isolation.
     """
     print("[*] Executing in VM analysis environment:", exe_path)
 

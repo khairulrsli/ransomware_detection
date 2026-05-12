@@ -55,9 +55,12 @@ def _deploy_canary_files(watch_dirs):
     Deploy invisible canary/honeypot files in watched directories.
     If a canary file is modified or deleted, it's a STRONG ransomware indicator
     since no legitimate application should touch these files.
-    Returns dict of {canary_path: original_hash}.
+    Returns (canaries, created_paths), where canaries maps
+    {canary_path: original_hash} and created_paths only contains files this
+    logger created during this run.
     """
     canaries = {}
+    created_paths = []
     canary_names = ['.~sysconfig.dat', '.~thumbcache.db', '.~desktop.ini.bak']
 
     for watch_dir in watch_dirs:
@@ -71,6 +74,7 @@ def _deploy_canary_files(watch_dirs):
                     content = f"CANARY_{hashlib.md5(watch_dir.encode()).hexdigest()}"
                     with open(canary_path, 'w') as f:
                         f.write(content)
+                    created_paths.append(canary_path)
                     # Set hidden attribute on Windows
                     if os.name == 'nt':
                         try:
@@ -83,7 +87,18 @@ def _deploy_canary_files(watch_dirs):
                     canaries[canary_path] = hashlib.sha256(f.read()).hexdigest()
             except (OSError, PermissionError):
                 pass
-    return canaries
+    return canaries, created_paths
+
+
+def _cleanup_created_canaries(created_paths):
+    """Remove only canary files created by this logger run."""
+    for path in created_paths:
+        try:
+            if os.path.exists(path):
+                os.chmod(path, 0o600)
+                os.remove(path)
+        except (OSError, PermissionError):
+            pass
 
 
 def _check_canary_integrity(canaries):
@@ -182,7 +197,7 @@ def log_behavior(pid=None, duration=35):
             known_files[watch_dir] = snapshot_files(watch_dir)
 
     # Deploy canary honeypot files
-    canaries = _deploy_canary_files(WATCH_DIRS)
+    canaries, created_canaries = _deploy_canary_files(WATCH_DIRS)
 
     # Clear and initialize the log file
     with open(LOG_FILE, "w", newline="") as f:
@@ -465,6 +480,8 @@ def log_behavior(pid=None, duration=35):
     except Exception as e:
         print(f"[!] Logging error: {e}")
         pass
+    finally:
+        _cleanup_created_canaries(created_canaries)
 
 if __name__ == "__main__":
     import sys
