@@ -1,9 +1,4 @@
-# Ransomware Detection Using Behavioural Event Analysis
-
-**Student:** Khairul Ikhwan Bin Rusli (52215224240)  
-**Program:** Bachelor of Information Technology (Hons) - Computer System Security  
-**Institution:** Universiti Kuala Lumpur MIIT  
-**Supervisor:** Madam Mardiana Binti Mahari
+# Ransomware Detection Using Dynamic Api Call Analysis
 
 ---
 
