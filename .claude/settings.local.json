@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(semgrep --config=auto . --exclude=\"venv,env,.venv,.git,bandit_report.json\" --json -o semgrep_report.json)",
+      "Bash(pip install *)",
+      "Bash(python -m pytest tests/ --cov=app --cov=scripts --cov-report=term-missing)",
+      "Skill(superpowers:test-driven-development)",
+      "Bash(python *)"
+    ]
+  }
+}

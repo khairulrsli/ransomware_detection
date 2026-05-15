@@ -27,8 +27,13 @@ def load_tokenizer():
     if _cached_tokenizer is not None and _cached_tokenizer_path == tokenizer_path:
         return _cached_tokenizer
 
+    resolved = os.path.realpath(tokenizer_path)
+    allowed_dir = os.path.realpath(model_dir)
+    if not resolved.startswith(allowed_dir + os.sep) and resolved != allowed_dir:
+        raise ValueError(f"Tokenizer path outside model directory: {resolved}")
+
     try:
-        with open(tokenizer_path, "rb") as f:
+        with open(resolved, "rb") as f:
             _cached_tokenizer = pickle.load(f)
             _cached_tokenizer_path = tokenizer_path
             return _cached_tokenizer

@@ -143,8 +143,9 @@ def kill_process_tree(file_path):
 
     if all_procs:
         try:
+            taskkill = shutil.which("taskkill") or r"C:\Windows\System32\taskkill.exe"
             subprocess.run(
-                ["taskkill", "/F", "/T", "/PID", str(all_procs[0].pid)],
+                [taskkill, "/F", "/T", "/PID", str(all_procs[0].pid)],
                 capture_output=True, timeout=3
             )
         except Exception:

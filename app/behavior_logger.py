@@ -71,7 +71,7 @@ def _deploy_canary_files(watch_dirs):
             try:
                 if not os.path.exists(canary_path):
                     # Create a small canary file with known content
-                    content = f"CANARY_{hashlib.md5(watch_dir.encode()).hexdigest()}"
+                    content = f"CANARY_{hashlib.md5(watch_dir.encode(), usedforsecurity=False).hexdigest()}"
                     with open(canary_path, 'w') as f:
                         f.write(content)
                     created_paths.append(canary_path)

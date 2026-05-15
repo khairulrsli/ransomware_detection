@@ -125,7 +125,12 @@ def runtime_composite_score(model, events, tokenizer):
 def main():
     print("[*] Loading model and tokenizer...")
     model = load_model(os.path.join(ROOT, "model", "trained_model.h5"), compile=False)
-    with open(os.path.join(ROOT, "model", "tokenizer.pkl"), "rb") as f:
+    tokenizer_path = os.path.join(ROOT, "model", "tokenizer.pkl")
+    resolved = os.path.realpath(tokenizer_path)
+    allowed_dir = os.path.realpath(os.path.join(ROOT, "model"))
+    if not resolved.startswith(allowed_dir + os.sep) and resolved != allowed_dir:
+        raise ValueError(f"Tokenizer path outside model directory: {resolved}")
+    with open(resolved, "rb") as f:
         tokenizer = pickle.load(f)
 
     print("[*] Loading dataset (mirrors training split exactly)...")

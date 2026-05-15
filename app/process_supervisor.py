@@ -2,6 +2,7 @@ import subprocess
 import time
 import threading
 import os
+import shutil
 import psutil
 import behavior_logger
 
@@ -170,13 +171,14 @@ def _force_kill(process):
                 p.kill()
             except Exception:
                 pass
-    except psutil.NoSuchProcess:
+    except Exception:
         pass
 
     # Fallback: taskkill /F /T
     try:
+        taskkill = shutil.which("taskkill") or r"C:\Windows\System32\taskkill.exe"
         subprocess.run(
-            ["taskkill", "/F", "/T", "/PID", str(pid)],
+            [taskkill, "/F", "/T", "/PID", str(pid)],
             capture_output=True, timeout=3
         )
     except Exception:
