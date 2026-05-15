@@ -1,37 +1,49 @@
-   MODEL EVALUATION RESULTS
-============================================================
-  Accuracy  : 92.65%
-  Loss      : 0.2389
+MODEL EVALUATION RESULTS — provenance-aware split
+======================================================================
+
+The dataset contains two distributions: a small set of real
+API-sequence captures (filenames containing '_real_') and a
+larger synthetic corpus used to bootstrap the event vocabulary.
+Real and synthetic samples are stratified across train/test, and
+metrics are reported separately for each slice.
+
+----------------------------------------------------------------------
+  Combined test set  (n=490)
+----------------------------------------------------------------------
+  Accuracy  : 90.41%
+  Precision : 95.24%
+  Recall    : 85.94%
+  F1-Score  : 90.35%
+  Confusion : TN=223 FP=11 FN=36 TP=220
+
+----------------------------------------------------------------------
+  Real-only test set  (n=38)
+----------------------------------------------------------------------
+  Accuracy  : 71.05%
+  Precision : 90.91%
+  Recall    : 50.00%
+  F1-Score  : 64.52%
+  Confusion : TN=17 FP=1 FN=10 TP=10
+
+----------------------------------------------------------------------
+  Synthetic-only set  (n=452)
+----------------------------------------------------------------------
+  Accuracy  : 92.04%
   Precision : 95.45%
-  Recall    : 90.23%
-  F1-Score  : 92.77%
-============================================================
+  Recall    : 88.98%
+  F1-Score  : 92.11%
+  Confusion : TN=206 FP=10 FN=26 TP=210
 
-  Confusion Matrix:
-                        Predicted Benign  Predicted Malicious
-  Actual Benign               223                 11         
-  Actual Malicious             25                 231        
-
-  Classification Report:
-              precision    recall  f1-score   support
-
-      Benign       0.90      0.95      0.93       234
-   Malicious       0.95      0.90      0.93       256
-
-    accuracy                           0.93       490
-   macro avg       0.93      0.93      0.93       490
-weighted avg       0.93      0.93      0.93       490
-
-============================================================
-  EARLY DETECTION EVALUATION
-============================================================
+======================================================================
+  EARLY DETECTION (real-only test set)
+======================================================================
 Window             Samples      Acc     Prec   Recall       F1      FPR
-First 10 calls         490   49.18%   52.52%   28.52%   36.96%   28.21%
-First 20 calls         490   54.29%   58.70%   42.19%   49.09%   32.48%
-First 30 calls         490   56.12%   60.62%   45.70%   52.12%   32.48%
-First 50 calls         480   70.21%   70.85%   75.00%   72.87%   35.27%
-First 75 calls         477   75.68%   74.14%   83.98%   78.75%   33.94%
-First 100 calls        474   91.56%   95.71%   88.14%   91.77%    4.52%
-First 150 calls         36   55.56%  100.00%   15.79%   27.27%    0.00%
-Full log               490   92.65%   95.45%   90.23%   92.77%    4.70%
-============================================================
+First 10 calls          38   50.00%   53.33%   40.00%   45.71%   38.89%
+First 20 calls          38   65.79%   76.92%   50.00%   60.61%   16.67%
+First 30 calls          38   71.05%   80.00%   60.00%   68.57%   16.67%
+First 50 calls          38   73.68%   91.67%   55.00%   68.75%    5.56%
+First 75 calls          38   76.32%  100.00%   55.00%   70.97%    0.00%
+First 100 calls         38   68.42%  100.00%   40.00%   57.14%    0.00%
+First 150 calls         38   73.68%  100.00%   50.00%   66.67%    0.00%
+Full log                38   71.05%   90.91%   50.00%   64.52%    5.56%
+======================================================================

@@ -1,205 +1,131 @@
-# Ransomware Detection Using Dynamic Api Call Analysis
+# Ransomware Detection Using Dynamic Analysis
+
+A behavioral analysis tool that detects ransomware in real-time by running executables in a monitored VM environment, applying LSTM-based ML inference, and fusing 8 independent threat signals into a composite risk score.
 
 ---
 
-## Project Overview
+## How It Works
 
-This project is a ransomware detection prototype that uses dynamic behavioural monitoring and LSTM sequence classification. Suspicious Windows executables are intended to be tested inside an isolated Windows virtual machine. The VM provides the containment layer, while the Python application performs process-level execution control, behavioural logging, machine-learning prediction, scan history recording, and quarantine handling.
-
-The GUI contains three implemented tabs: **Analysis**, **Statistics**, and **Quarantine**.
-
-Important wording: this project observes behavioural events and process activity. It is not a full Windows API-hooking system and it is not a standalone hypervisor sandbox.
-
----
-
-## Core Features
-
-| Feature                   | Description                                                                                                                                                                                                                    |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| VM-based malware testing  | Intended to run inside a dedicated Windows VM with snapshots enabled. The Python runner supervises execution; it does not provide containment by itself.                                                                       |
-| PE file validation        | Checks executable structure before analysis.                                                                                                                                                                                   |
-| Behavioural monitoring    | Observes process, file-system, CPU, memory, child-process, canary-file, and network indicators.                                                                                                                                |
-| Early detection mechanism | Can terminate suspicious runs based on rapid writes, high entropy files, canary violations, shadow-copy activity, and high risk score.                                                                                         |
-| LSTM prediction           | Classifies event sequences using a trained TensorFlow/Keras model.                                                                                                                                                             |
-| Multi-signal scoring      | Combines ML score, early-window prediction, and runtime behavioural indicators. The current app verdict threshold is `APP_DETECTION_THRESHOLD = 0.35` and should be recalibrated when the dataset or scoring weights change. |
-| Quarantine system         | Moves detected threats into `quarantine/` and records them in SQLite.                                                                                                                                                        |
-| Statistics dashboard      | Shows scan history, detection counts, and recent analysis records.                                                                                                                                                             |
-| Unit tests                | Includes focused tests for preprocessing statistics and database behaviour.                                                                                                                                                    |
+1. **Sandbox execution** — target `.exe` is launched suspended inside the VM; a behavior logger attaches before the process resumes.
+2. **Behavioral monitoring** — `behavior_logger.py` polls every 150–500ms (adaptive) for file writes, entropy spikes, CPU bursts, network connections, suspicious child processes, shadow copy deletions, and canary file violations.
+3. **Early termination** — five tiered kill triggers stop the process immediately if definitive indicators fire (canary hit, rapid write + high entropy, etc.) before the 35-second window ends.
+4. **LSTM inference** — `early_detection.py` evaluates the model at multiple partial windows (10, 20, 30, 50, 75, 100, 150 API calls) for sub-sequence detection, then scores the full log.
+5. **Multi-signal fusion** — `compute_threat_score()` combines 8 weighted signals into a composite score [0.0–1.0]; definitive indicators override scoring to ≥ 0.95.
+6. **Response** — processes above the detection threshold (0.25) are killed, quarantined, and logged to SQLite.
 
 ---
 
-## Dataset
+## Threat Signals (Weighted Fusion)
 
-The included raw sequence dataset contains **2,450 CSV files**:
+| Signal               | Weight | Description                                           |
+| -------------------- | ------ | ----------------------------------------------------- |
+| ML prediction        | 0.30   | LSTM score on full API-call sequence                  |
+| Early detection      | 0.15   | Earliest window crossing ML threshold                 |
+| Rapid file write     | 0.15   | Burst write ops (>=3 files changed rapidly)           |
+| High entropy files   | 0.15   | Modified files with Shannon entropy > 7.5 (encrypted) |
+| Canary violation     | 0.10   | Hidden honeypot files modified/deleted                |
+| Shadow copy deletion | 0.05   | vssadmin/wmic shadow copy delete commands             |
+| Write + CPU combo    | 0.05   | High write density combined with busy loops           |
+| Suspicious children  | 0.05   | Child processes: cmd, powershell, vssadmin, etc.      |
 
-- **1,172 benign sequence samples**
-- **1,278 ransomware/malicious sequence samples**
-
-The training pipeline uses CSV files from `data/raw/benign/` and `data/raw/ransomware/`.
-
-Current regenerated model results from `model/evaluation_results.txt`:
-
-| Metric    |  Value |
-| --------- | -----: |
-| Accuracy  | 92.65% |
-| Precision | 95.45% |
-| Recall    | 90.23% |
-| F1-score  | 92.77% |
-
-Confusion matrix:
-
-```text
-Actual Benign:    223 predicted benign, 11 predicted malicious
-Actual Malicious: 25 predicted benign, 231 predicted malicious
-```
-
-Early-window results are weaker before 100 calls. The strongest early result in the current report is at the first 100 calls: **91.56% accuracy**, **95.71% precision**, **88.14% recall**, and **91.77% F1-score**.
+Canary violations or shadow copy deletions force composite >= 0.95 regardless of other signals.
 
 ---
 
-## System Workflow
+## Early Termination Tiers
 
-```text
-User selects suspicious .exe
-        |
-        v
-PE file validation
-        |
-        v
-Installer-name context check
-(does not skip analysis)
-        |
-        v
-Execution through the VM analysis runner
-        |
-        v
-Process-level behavioural monitoring
-        |
-        v
-Event log generation
-        |
-        v
-LSTM sequence preprocessing and prediction
-        |
-        v
-Multi-signal scoring and early-detection rules
-        |
-        v
-Terminate process and quarantine detected threat when needed
-        |
-        v
-Save scan result to SQLite database
-```
-
----
-
-## Quick Start
-
-1. Start a clean Windows VM snapshot.
-2. Keep the VM isolated from the host where possible.
-3. Install dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-4. Train or retrain the model when needed:
-
-```bash
-python model/train_model.py
-```
-
-5. Run the application:
-
-```bash
-python app/main.py
-```
-
-6. Run tests:
-
-```bash
-python -m unittest discover -s tests
-```
-
----
-
-## GUI Tabs
-
-1. **Analysis**
-
-   - Select one executable file.
-   - Run behavioural analysis inside the VM.
-   - View behavioural metrics, ML score, threat score, and final verdict.
-2. **Statistics**
-
-   - View scan count, ransomware count, benign count, average confidence, and recent history.
-   - Export analysis history as CSV.
-   - Clear history and reset aggregate statistics.
-3. **Quarantine**
-
-   - View quarantined files.
-   - Permanently delete quarantined files.
+| Tier | Trigger                                   | Latency         |
+| ---- | ----------------------------------------- | --------------- |
+| 1    | Canary violation                          | Immediate       |
+| 2    | RapidFileWrite + HighEntropyFile          | Next poll cycle |
+| 3    | >= 2 RapidFileWrite events                | Next poll cycle |
+| 4    | >=3 write ops + >=2 busy loops within 10s | Next poll cycle |
+| 5    | Streaming risk score >= 0.8               | Next poll cycle |
 
 ---
 
 ## Project Structure
 
-```text
-app/
-  main.py              GUI and main workflow
-  sandbox_runner.py    VM analysis runner: process launch and timeout control
-  behavior_logger.py   Runtime behaviour monitoring and early triggers
-  preprocessing.py     Tokenisation, padding, and event statistics
-  early_detection.py   Partial-sequence LSTM checks
-  threat_database.py   SQLite scan history and quarantine records
-
-model/
-  train_model.py       Training and evaluation pipeline
-  lstm_model.py        Model architecture
-  trained_model.h5     Saved Keras model
-  tokenizer.pkl        Saved tokenizer
-  evaluation_results.txt
-  training_epochs.txt
-
-data/raw/
-  benign/              Benign event-sequence CSV samples
-  ransomware/          Malicious event-sequence CSV samples
-
-logs/
-  api_logs.csv         Runtime behavioural event log
-
-quarantine/
-  quarantined files
-
-tests/
-  test_preprocessing.py
-  test_threat_database.py
-  test_behavior_logger.py
-  test_static_hardening.py
+```
+ransomware_detection1/
+├── app/
+│   ├── main.py               # GUI (Tkinter), analysis orchestration
+│   ├── behavior_logger.py    # Real-time process/filesystem monitor
+│   ├── early_detection.py    # Multi-window LSTM inference
+│   ├── preprocessing.py      # Tokenizer, event-to-sequence conversion
+│   ├── process_supervisor.py # Sandbox launcher (CREATE_SUSPENDED + resume)
+│   └── threat_database.py    # SQLite persistence (history, quarantine, stats)
+├── model/
+│   ├── trained_model.h5      # Trained LSTM model
+│   └── tokenizer.pkl         # Fitted Keras tokenizer
+├── data/
+│   └── raw/
+│       ├── benign/           # Benign API-call CSVs for training
+│       └── ransomware/       # Ransomware API-call CSVs for training
+├── logs/
+│   └── api_logs.csv          # Live behavioral log (overwritten each scan)
+├── quarantine/               # Quarantined executables
+└── threat_database.db        # SQLite database
 ```
 
 ---
 
-## Important Safety Notes
+## Requirements
 
-The Python application is not a full sandbox by itself. The **virtual machine** provides isolation. Always test malware only inside a dedicated VM with snapshots enabled.
+- Python 3.9+
+- Windows (sandbox uses Win32 `CREATE_SUSPENDED` + `ResumeThread`)
+- Run inside a VM — the sandbox provides process supervision, not OS-level isolation
 
-Recommended VM precautions:
-
-- Use a clean snapshot before every malware test.
-- Disable shared folders during malware execution.
-- Use host-only networking or disconnected networking.
-- Revert the snapshot after each malware test.
-- Do not test real malware on your main machine.
+```
+pip install tensorflow pandas numpy scikit-learn psutil
+```
 
 ---
 
-## Current Limitations
+## Usage
 
-- The app depends on the VM for real containment.
-- Behaviour logging uses process and filesystem observation, not full Windows API hooking.
-- File-change monitoring can be affected by unrelated activity inside watched directories.
-- Early detection before 100 calls is currently much weaker than full-log classification.
-- The app's composite threshold is a prototype operating point, not a formally calibrated production threshold.
-- The current model is evaluated on the included dataset; broader validation with more real-world ransomware families is recommended.
-- Results should be presented as prototype findings, not production antivirus performance.
+Train the model first (if `model/trained_model.h5` is missing):
+
+```bash
+python model/train_model.py
+```
+
+Launch the GUI:
+
+```bash
+python app/main.py
+```
+
+Click **SELECT FILE & ANALYZE**, choose an `.exe`. Results appear in the Analysis tab; history and quarantine are in their respective tabs.
+
+Early detection CLI (score a log file directly):
+
+```bash
+python app/early_detection.py logs/api_logs.csv
+```
+
+---
+
+## Threat Score Thresholds
+
+| Score   | Level                           |
+| ------- | ------------------------------- |
+| >= 0.60 | CRITICAL                        |
+| >= 0.40 | HIGH                            |
+| >= 0.25 | MEDIUM / detected as ransomware |
+| < 0.25  | LOW / benign                    |
+
+Known legitimate installer names (Chrome, Firefox, VS Code, etc.) receive a 0.5x score discount when no definitive indicator fired — this prevents false positives from archivers and installers whose write patterns resemble ransomware.
+
+---
+
+## Database
+
+SQLite at `threat_database.db`. Tables:
+
+- `analysis_history` — per-scan verdicts, scores, metrics, actions
+- `quarantine_log` — quarantined file records with paths and threat level
+- `statistics` — aggregate counters (total scans, detection rate, avg confidence)
+- `threat_rules` — configurable rule thresholds (default used by scoring engine)
+
+Export history as CSV from the Statistics tab -> **Export CSV**.

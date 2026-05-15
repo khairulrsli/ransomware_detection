@@ -29,11 +29,7 @@ def parse_evaluation_results():
         if match:
             metrics[key] = float(match.group(1))
 
-    cm_match = re.search(
-        r"Actual Benign\s+(\d+)\s+(\d+).*?Actual Malicious\s+(\d+)\s+(\d+)",
-        text,
-        re.S,
-    )
+    cm_match = re.search(r"TN=(\d+)\s+FP=(\d+)\s+FN=(\d+)\s+TP=(\d+)", text)
     if not cm_match:
         raise ValueError("Could not parse confusion matrix from evaluation_results.txt")
 

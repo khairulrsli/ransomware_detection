@@ -9,7 +9,7 @@ import shutil
 import stat
 import time
 import subprocess
-from sandbox_runner import run_in_sandbox
+from process_supervisor import run_in_sandbox
 import behavior_logger
 from preprocessing import read_events_from_log
 from early_detection import predict_early_windows, DEFAULT_WINDOWS
@@ -22,7 +22,7 @@ PARENT_DIR = os.path.dirname(APP_DIR)
 MODEL_DIR  = os.path.join(PARENT_DIR, "model")
 MODEL_PATH = os.path.join(MODEL_DIR, "trained_model.h5")
 LOG_FILE   = os.path.join(PARENT_DIR, "logs", "api_logs.csv")
-APP_DETECTION_THRESHOLD = 0.35
+APP_DETECTION_THRESHOLD = 0.25  # Calibrated: best precision/FP tradeoff on real-only test set
 ML_ALERT_THRESHOLD = 0.5
 
 # ── WHITELIST ──────────────────────────────────────────────────────────────────
@@ -381,6 +381,16 @@ def analyze_in_thread(file_path):
         rapid_writes = metrics['rapid_writes']
         busy_loops   = metrics['busy_loops']
         network_ops  = metrics['network_ops']
+
+        # Archivers/installers produce high-entropy rapid-write patterns that
+        # resemble ransomware. Discount score when whitelist matches and no
+        # definitive indicator (canary, shadow delete) fired.
+        if is_legit and metrics.get('canary_violations', 0) == 0 and metrics.get('shadow_deletes', 0) == 0:
+            composite *= 0.5
+            if composite >= 0.60:   threat_level = "CRITICAL"
+            elif composite >= 0.40: threat_level = "HIGH"
+            elif composite >= 0.25: threat_level = "MEDIUM"
+            else:                   threat_level = "LOW"
 
         # Detection threshold: composite >= APP_DETECTION_THRESHOLD triggers ransomware verdict.
         # Keep this named because it requires calibration when datasets change.

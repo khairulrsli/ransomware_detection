@@ -1,0 +1,32 @@
+COMPOSITE-SCORE THRESHOLD CALIBRATION
+Evaluated on real-only held-out test samples
+n = 38 (benign=18, ransom=20)
+========================================================================
+ Threshold  Precision     Recall         F1    TN    FP    FN    TP
+------------------------------------------------------------------------
+      0.10     60.61%    100.00%     75.47%     5    13     0    20
+      0.15     76.19%     80.00%     78.05%    13     5     4    16
+      0.20    100.00%     65.00%     78.79%    18     0     7    13
+      0.25    100.00%     25.00%     40.00%    18     0    15     5
+      0.30      0.00%      0.00%      0.00%    18     0    20     0
+      0.35      0.00%      0.00%      0.00%    18     0    20     0
+      0.40      0.00%      0.00%      0.00%    18     0    20     0
+      0.45      0.00%      0.00%      0.00%    18     0    20     0
+      0.50      0.00%      0.00%      0.00%    18     0    20     0
+      0.55      0.00%      0.00%      0.00%    18     0    20     0
+      0.60      0.00%      0.00%      0.00%    18     0    20     0
+      0.65      0.00%      0.00%      0.00%    18     0    20     0
+      0.70      0.00%      0.00%      0.00%    18     0    20     0
+      0.75      0.00%      0.00%      0.00%    18     0    20     0
+      0.80      0.00%      0.00%      0.00%    18     0    20     0
+      0.85      0.00%      0.00%      0.00%    18     0    20     0
+      0.90      0.00%      0.00%      0.00%    18     0    20     0
+------------------------------------------------------------------------
+
+Best F1:               threshold=0.20  F1=78.79%
+Best recall @ P>=95%:  threshold=0.20  Recall=65.00%
+
+Recommendation: pick the threshold that best matches the deployment
+priority. Maximising F1 balances false alarms and missed detections.
+If false alarms are costly (consumer deployment), pick the highest
+threshold with recall>=80% that keeps precision>=95%.

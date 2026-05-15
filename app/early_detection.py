@@ -72,9 +72,11 @@ def predict_early_windows(model, events: List[str], windows: Iterable[int] = DEF
     final_score = float(model.predict(full_data, verbose=0)[0][0])
     scores["full"] = final_score
 
-    if earliest_window is None and final_score >= threshold:
-        earliest_window = len(events)
-        earliest_score = final_score
+    # NOTE: we do NOT backfill earliest_alert_window from the full-log score.
+    # Doing so caused compute_threat_score() to double-count the ML signal:
+    # once via ml_signal (weight 0.30) and again via early_signal (weight 0.15).
+    # An "early alert" should mean exactly that — the model crossed threshold
+    # on a partial sequence — not "the full log also crossed threshold."
 
     # ── Score acceleration analysis ──────────────────────────────────────
     # A rapidly increasing score across windows indicates escalating threat

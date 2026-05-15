@@ -40,11 +40,11 @@ class StaticHardeningTests(unittest.TestCase):
     def test_main_uses_named_threshold_constant(self):
         source = self.read_source(os.path.join("app", "main.py"))
 
-        self.assertIn("APP_DETECTION_THRESHOLD = 0.35", source)
+        self.assertIn("APP_DETECTION_THRESHOLD = 0.25", source)
         self.assertIn("is_ransomware = composite >= APP_DETECTION_THRESHOLD", source)
 
     def test_runner_uses_vm_analysis_wording(self):
-        source = self.read_source(os.path.join("app", "sandbox_runner.py"))
+        source = self.read_source(os.path.join("app", "process_supervisor.py"))
 
         self.assertIn("VM analysis runner", source)
         self.assertNotIn("restricted sandbox environment", source)
