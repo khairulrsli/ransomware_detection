@@ -32,6 +32,7 @@ jobs:
         run: |
           python -m pytest tests/ \
             --cov=app --cov=scripts \
+            --cov-config=.coveragerc \
             --cov-report=xml:coverage.xml \
             --cov-report=term-missing \
             -v
