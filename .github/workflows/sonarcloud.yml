@@ -27,6 +27,8 @@ jobs:
           pip install pytest pytest-cov
 
       - name: Run tests with coverage
+        env:
+          PYTHONPATH: ${{ github.workspace }}/app:${{ github.workspace }}/scripts
         run: |
           python -m pytest tests/ \
             --cov=app --cov=scripts \
@@ -34,6 +36,16 @@ jobs:
             --cov-report=term-missing \
             -v
         continue-on-error: true
+
+      - name: Verify coverage report exists
+        run: |
+          if [ -f coverage.xml ]; then
+            echo "coverage.xml found"
+            head -5 coverage.xml
+          else
+            echo "WARNING: coverage.xml not generated — tests likely failed"
+            exit 0
+          fi
 
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@master
