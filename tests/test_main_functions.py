@@ -319,5 +319,120 @@ class TestComputeThreatScore(unittest.TestCase):
         self.assertAlmostEqual(signals["rapid_signal"], 0.0)
 
 
+class TestKillProcessTree(unittest.TestCase):
+    def _make_proc(self, exe, pid):
+        p = MagicMock()
+        p.info = {"exe": exe, "pid": pid}
+        p.pid = pid
+        p.children.return_value = []
+        return p
+
+    def test_empty_when_no_match(self):
+        with patch("main.psutil.process_iter", return_value=[]):
+            result = main.kill_process_tree("/evil.exe")
+        self.assertEqual(result, [])
+
+    def test_kills_matching_process(self):
+        proc = self._make_proc("/evil.exe", 1234)
+        with patch("main.psutil.process_iter", return_value=[proc]), \
+             patch("main.subprocess.run"), \
+             patch("main.shutil.which", return_value="taskkill"):
+            result = main.kill_process_tree("/evil.exe")
+        proc.suspend.assert_called()
+        proc.kill.assert_called()
+        self.assertIn(1234, result)
+
+    def test_includes_children(self):
+        child = MagicMock()
+        child.pid = 5678
+        proc = self._make_proc("/evil.exe", 1234)
+        proc.children.return_value = [child]
+        with patch("main.psutil.process_iter", return_value=[proc]), \
+             patch("main.subprocess.run"), \
+             patch("main.shutil.which", return_value="taskkill"):
+            result = main.kill_process_tree("/evil.exe")
+        child.suspend.assert_called()
+        child.kill.assert_called()
+
+    def test_skips_process_with_no_exe(self):
+        proc = self._make_proc(None, 9999)
+        with patch("main.psutil.process_iter", return_value=[proc]):
+            result = main.kill_process_tree("/evil.exe")
+        self.assertEqual(result, [])
+
+    def test_returns_empty_on_no_such_process(self):
+        import psutil as _psutil
+        proc = MagicMock()
+        proc.info = {"exe": "/evil.exe", "pid": 1111}
+        proc.pid = 1111
+        proc.children.side_effect = _psutil.NoSuchProcess(1111)
+        with patch("main.psutil.process_iter", return_value=[proc]), \
+             patch("main.subprocess.run"), \
+             patch("main.shutil.which", return_value="taskkill"):
+            result = main.kill_process_tree("/evil.exe")
+        self.assertIsInstance(result, list)
+
+    def test_taskkill_called_when_procs_found(self):
+        proc = self._make_proc("/evil.exe", 2222)
+        with patch("main.psutil.process_iter", return_value=[proc]), \
+             patch("main.subprocess.run") as mock_run, \
+             patch("main.shutil.which", return_value="taskkill"):
+            main.kill_process_tree("/evil.exe")
+        mock_run.assert_called()
+
+
+class TestQuarantineFile(unittest.TestCase):
+    def test_moves_file_successfully(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "evil.exe")
+            with open(src, "wb") as f:
+                f.write(b"evil content")
+            with patch("main.PARENT_DIR", tmpdir):
+                ok, qpath = main.quarantine_file(src, "evil.exe")
+        self.assertTrue(ok)
+        self.assertIsNotNone(qpath)
+        self.assertFalse(os.path.exists(src))
+
+    def test_returns_false_when_file_missing(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch("main.PARENT_DIR", tmpdir):
+                ok, qpath = main.quarantine_file("/nonexistent/path/evil.exe", "evil.exe")
+        self.assertFalse(ok)
+        self.assertIsNone(qpath)
+
+    def test_returns_quarantine_path(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "malware.exe")
+            with open(src, "wb") as f:
+                f.write(b"x")
+            with patch("main.PARENT_DIR", tmpdir):
+                ok, qpath = main.quarantine_file(src, "malware.exe")
+        self.assertTrue(ok)
+        self.assertIn("malware.exe", qpath)
+
+
+class TestSetTextWidget(unittest.TestCase):
+    def test_sets_content_and_disables(self):
+        widget = MagicMock()
+        main.set_text_widget(widget, "scan complete")
+        widget.config.assert_any_call(state="normal")
+        widget.delete.assert_called_with("1.0", "end")
+        widget.insert.assert_called_with("end", "scan complete")
+        widget.config.assert_called_with(state="disabled")
+
+    def test_empty_content(self):
+        widget = MagicMock()
+        main.set_text_widget(widget, "")
+        widget.insert.assert_called_with("end", "")
+
+
+class TestSetProgress(unittest.TestCase):
+    def test_does_not_raise(self):
+        main.set_progress("Scanning...", 50, "50% - Running")
+
+    def test_different_values(self):
+        main.set_progress("Done", 100, "100% - Complete")
+
+
 if __name__ == "__main__":
     unittest.main()

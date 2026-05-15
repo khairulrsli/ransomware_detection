@@ -134,6 +134,14 @@ class CanaryIntegrityTests(unittest.TestCase):
         violations = behavior_logger._check_canary_integrity({})
         self.assertEqual(violations, [])
 
+    def test_inaccessible_canary_reported(self):
+        import builtins
+        with patch("behavior_logger.os.path.exists", return_value=True), \
+             patch("builtins.open", side_effect=OSError("permission denied")):
+            violations = behavior_logger._check_canary_integrity({"/locked/canary.dat": "fakehash"})
+        self.assertEqual(len(violations), 1)
+        self.assertEqual(violations[0][0], "INACCESSIBLE")
+
 
 class ShadowCopyCheckTests(unittest.TestCase):
     def test_returns_false_on_non_windows(self):

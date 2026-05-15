@@ -209,5 +209,137 @@ class FormatEarlyDetectionReportTests(unittest.TestCase):
         self.assertNotIn("Behavioral Analysis", report)
 
 
+from early_detection import evaluate_dataset_early_detection
+
+
+class ZeroNegativeWindowTests(unittest.TestCase):
+    def setUp(self):
+        self.tok_patcher = patch("preprocessing.load_tokenizer", return_value=MagicMock(
+            texts_to_sequences=lambda texts: [[1, 2, 3]]
+        ))
+        self.tok_patcher.start()
+
+    def tearDown(self):
+        self.tok_patcher.stop()
+
+    def test_zero_window_skipped(self):
+        events = ["WriteFile"] * 100
+        model = make_model(0.9)  # called only for full log
+        result = predict_early_windows(model, events, windows=[0], threshold=0.5)
+        self.assertNotIn(0, result["scores"])
+        self.assertIn("full", result["scores"])
+
+    def test_negative_window_skipped(self):
+        events = ["WriteFile"] * 100
+        model = make_model(0.9)
+        result = predict_early_windows(model, events, windows=[-5], threshold=0.5)
+        self.assertNotIn(-5, result["scores"])
+
+
+class ConfidenceHighToCriticalBoostTests(unittest.TestCase):
+    def setUp(self):
+        self.tok_patcher = patch("preprocessing.load_tokenizer", return_value=MagicMock(
+            texts_to_sequences=lambda texts: [[1, 2, 3]]
+        ))
+        self.tok_patcher.start()
+
+    def tearDown(self):
+        self.tok_patcher.stop()
+
+    def test_confidence_boosted_from_high_to_critical(self):
+        # Enum phase followed by heavy writes → high write_ratio + phase_ratio
+        events = ["FindFirstFile"] * 30 + ["WriteFile"] * 70
+        # No qualifying windows (window=200 > 100 events) → final_score=0.85 → HIGH
+        # Behavioral stats (write_ratio=0.7, high phase_ratio) then boost HIGH → CRITICAL
+        model = make_model(0.85)
+        result = predict_early_windows(model, events, windows=[200], threshold=0.5)
+        self.assertEqual(result["confidence_level"], "CRITICAL")
+
+
+class EvaluateDatasetEarlyDetectionTests(unittest.TestCase):
+    def setUp(self):
+        self.tok_patcher = patch("preprocessing.load_tokenizer", return_value=MagicMock(
+            texts_to_sequences=lambda texts: [[1, 2, 3]]
+        ))
+        self.tok_patcher.start()
+
+    def tearDown(self):
+        self.tok_patcher.stop()
+
+    def _model(self, score=0.8):
+        m = MagicMock()
+        m.predict.return_value = np.array([[score]])
+        return m
+
+    def test_returns_window_keys(self):
+        with patch("early_detection.read_events_from_log", return_value=["WriteFile"] * 50), \
+             patch("early_detection.preprocess_events", return_value=np.zeros((1, 100))):
+            result = evaluate_dataset_early_detection(
+                self._model(), ["/fake/a.csv"], [1], windows=[10, 20]
+            )
+        self.assertIn("first_10_calls", result)
+        self.assertIn("first_20_calls", result)
+        self.assertIn("full_log", result)
+
+    def test_metrics_keys_present(self):
+        with patch("early_detection.read_events_from_log", return_value=["WriteFile"] * 50), \
+             patch("early_detection.preprocess_events", return_value=np.zeros((1, 100))):
+            result = evaluate_dataset_early_detection(
+                self._model(), ["/fake/a.csv"], [1], windows=[10]
+            )
+        entry = result["first_10_calls"]
+        for key in ("accuracy", "precision", "recall", "f1", "false_positive_rate", "confusion_matrix"):
+            self.assertIn(key, entry)
+
+    def test_skips_short_sequences(self):
+        # 5 events < window=10 → window skipped, full_log still present
+        with patch("early_detection.read_events_from_log", return_value=["WriteFile"] * 5), \
+             patch("early_detection.preprocess_events", return_value=np.zeros((1, 100))):
+            result = evaluate_dataset_early_detection(
+                self._model(), ["/fake/a.csv"], [1], windows=[10, 20]
+            )
+        self.assertNotIn("first_10_calls", result)
+        self.assertIn("full_log", result)
+
+    def test_skips_file_on_exception(self):
+        with patch("early_detection.read_events_from_log", side_effect=Exception("bad file")):
+            result = evaluate_dataset_early_detection(
+                self._model(), ["/bad/a.csv"], [1], windows=[10]
+            )
+        self.assertNotIn("first_10_calls", result)
+
+    def test_empty_file_list_returns_empty(self):
+        result = evaluate_dataset_early_detection(self._model(), [], [], windows=[10])
+        self.assertEqual(result, {})
+
+    def test_correct_prediction_updates_confusion_matrix(self):
+        # Model predicts 0.2 (below 0.5) for benign sample → TN
+        with patch("early_detection.read_events_from_log", return_value=["ReadFile"] * 50), \
+             patch("early_detection.preprocess_events", return_value=np.zeros((1, 100))):
+            result = evaluate_dataset_early_detection(
+                self._model(score=0.2), ["/fake/a.csv"], [0], windows=[10]
+            )
+        cm = result["first_10_calls"]["confusion_matrix"]
+        self.assertEqual(cm["tn"], 1)
+        self.assertEqual(cm["fp"], 0)
+
+    def test_fpr_zero_when_no_false_positives(self):
+        # All samples are ransomware, model predicts ransomware → no FP
+        with patch("early_detection.read_events_from_log", return_value=["WriteFile"] * 50), \
+             patch("early_detection.preprocess_events", return_value=np.zeros((1, 100))):
+            result = evaluate_dataset_early_detection(
+                self._model(score=0.9), ["/fake/a.csv"], [1], windows=[10]
+            )
+        self.assertAlmostEqual(result["first_10_calls"]["false_positive_rate"], 0.0)
+
+    def test_none_window_produces_full_log_key(self):
+        with patch("early_detection.read_events_from_log", return_value=["WriteFile"] * 50), \
+             patch("early_detection.preprocess_events", return_value=np.zeros((1, 100))):
+            result = evaluate_dataset_early_detection(
+                self._model(), ["/fake/a.csv"], [1], windows=[]
+            )
+        self.assertIn("full_log", result)
+
+
 if __name__ == "__main__":
     unittest.main()
