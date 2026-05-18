@@ -812,17 +812,17 @@ def delete_quarantine_file():
     sel_win = tk.Toplevel(root)
     sel_win.title("Delete Quarantined File")
     sel_win.geometry("480x380")
-    sel_win.config(bg="#f8f9fb")
+    sel_win.config(bg=BG_CARD)
     sel_win.transient(root)
     sel_win.grab_set()
 
     tk.Label(sel_win, text="Select file to delete:", font=HEADER_FONT,
-             bg="#f8f9fb", fg="#1f2937").pack(pady=(16, 8))
+             bg=BG_CARD, fg=TEXT_PRIMARY).pack(pady=(16, 8))
 
     listbox = tk.Listbox(sel_win, font=MONO_FONT, height=12, selectmode="single",
-                          bg="#ffffff", fg="#1f2937", relief="flat",
-                          selectbackground="#6366f1", selectforeground="white",
-                          highlightbackground="#e1e4e8", highlightthickness=1)
+                         bg=BG_INPUT, fg=TEXT_PRIMARY, relief="flat",
+                         selectbackground=ACCENT_BLUE, selectforeground="white",
+                         highlightbackground=BORDER_COLOR, highlightthickness=1)
     listbox.pack(fill="both", expand=True, padx=20, pady=4)
 
     for q in quarantine_list:
@@ -852,14 +852,14 @@ def delete_quarantine_file():
         sel_win.destroy()
         show_quarantine()
 
-    btn_frame = tk.Frame(sel_win, bg="#f8f9fb")
+    btn_frame = tk.Frame(sel_win, bg=BG_CARD)
     btn_frame.pack(fill="x", padx=20, pady=14)
     tk.Button(btn_frame, text="DELETE", font=BTN_FONT, bg=DANGER_COLOR,
               fg="white", command=_do_delete, padx=18, pady=8,
               border=0, cursor="hand2", activebackground="#dc2626").pack(side="left", padx=4)
-    tk.Button(btn_frame, text="Cancel", font=BTN_FONT, bg="#d1d5db",
-              fg="#374151", command=sel_win.destroy, padx=18, pady=8,
-              border=0, cursor="hand2", activebackground="#b8bcc4").pack(side="right", padx=4)
+    tk.Button(btn_frame, text="Cancel", font=BTN_FONT, bg=BG_INPUT,
+              fg=TEXT_MUTED, command=sel_win.destroy, padx=18, pady=8,
+              border=0, cursor="hand2", activebackground=BORDER_COLOR).pack(side="right", padx=4)
 
 
 # ── GUI ────────────────────────────────────────────────────────────────────────
@@ -1185,32 +1185,32 @@ notebook.add(st_tab, text="  Statistics  ")
 sc = tk.Frame(st_tab, bg=BG_DEEP)
 sc.pack(fill="both", expand=True, padx=14, pady=14)
 
-stats_card = tk.Frame(sc, bg=SURFACE, highlightbackground=BORDER_COLOR, highlightthickness=1)
+stats_card = tk.Frame(sc, bg=BG_CARD, highlightbackground=BORDER_COLOR, highlightthickness=1)
 stats_card.pack(fill="x", pady=(0, 10))
 tk.Label(stats_card, text="OVERVIEW", font=("Segoe UI", 10, "bold"),
-         fg=LIGHT_TEXT, bg=SURFACE).pack(anchor="w", padx=16, pady=(14, 0))
+         fg=TEXT_MUTED, bg=BG_CARD).pack(anchor="w", padx=16, pady=(14, 0))
 tk.Frame(stats_card, bg=BORDER_COLOR, height=1).pack(fill="x", padx=16, pady=(6, 0))
 stats_text = tk.Text(stats_card, font=MONO_FONT, height=6, wrap="word",
-                      bg=INPUT_BG, fg="#1f2937", relief="flat", padx=12, pady=10,
-                      state="disabled", highlightbackground=BORDER_COLOR,
-                      highlightthickness=1)
+                     bg=BG_INPUT, fg=TEXT_PRIMARY, relief="flat", padx=12, pady=10,
+                     state="disabled", highlightbackground=BORDER_COLOR,
+                     highlightthickness=1)
 stats_text.pack(fill="x", padx=16, pady=(8, 16))
 
-br = tk.Frame(sc, bg=BG_DARK)
+br = tk.Frame(sc, bg=BG_DEEP)
 br.pack(fill="x", pady=6)
-_btn(br, "Refresh", SECONDARY_COLOR, refresh_statistics, side="left", padx=4)
-_btn(br, "Export CSV", WARNING_COLOR, export_report, side="left", padx=4)
-_btn(br, "Clear History", DANGER_COLOR, clear_history, side="left", padx=4)
+_btn(br, "Refresh", ACCENT_BLUE, refresh_statistics, side="left", padx=4)
+_btn(br, "Export CSV", WARN_ORANGE, export_report, side="left", padx=4)
+_btn(br, "Clear History", DANGER_RED, clear_history, side="left", padx=4)
 
-hist_card = tk.Frame(sc, bg=SURFACE, highlightbackground=BORDER_COLOR, highlightthickness=1)
+hist_card = tk.Frame(sc, bg=BG_CARD, highlightbackground=BORDER_COLOR, highlightthickness=1)
 hist_card.pack(fill="both", expand=True, pady=(6, 0))
 tk.Label(hist_card, text="ANALYSIS HISTORY", font=("Segoe UI", 10, "bold"),
-         fg=LIGHT_TEXT, bg=SURFACE).pack(anchor="w", padx=16, pady=(14, 0))
+         fg=TEXT_MUTED, bg=BG_CARD).pack(anchor="w", padx=16, pady=(14, 0))
 tk.Frame(hist_card, bg=BORDER_COLOR, height=1).pack(fill="x", padx=16, pady=(6, 0))
 history_view = tk.Text(hist_card, font=MONO_FONT, height=16, wrap="word",
-                        bg=INPUT_BG, fg="#1f2937", relief="flat", padx=12, pady=10,
-                        state="disabled", highlightbackground=BORDER_COLOR,
-                        highlightthickness=1)
+                       bg=BG_INPUT, fg=TEXT_PRIMARY, relief="flat", padx=12, pady=10,
+                       state="disabled", highlightbackground=BORDER_COLOR,
+                       highlightthickness=1)
 history_view.pack(fill="both", expand=True, padx=16, pady=(8, 16))
 
 # ── TAB 3: QUARANTINE ─────────────────────────────────────────────────────────
@@ -1219,20 +1219,20 @@ notebook.add(qt_tab, text="  Quarantine  ")
 qc = tk.Frame(qt_tab, bg=BG_DEEP)
 qc.pack(fill="both", expand=True, padx=14, pady=14)
 
-qbr = tk.Frame(qc, bg=BG_DARK)
+qbr = tk.Frame(qc, bg=BG_DEEP)
 qbr.pack(fill="x", pady=(0, 10))
-_btn(qbr, "Refresh", SECONDARY_COLOR, show_quarantine, side="left", padx=4)
-_btn(qbr, "Delete File", DANGER_COLOR, delete_quarantine_file, side="left", padx=4)
+_btn(qbr, "Refresh", ACCENT_BLUE, show_quarantine, side="left", padx=4)
+_btn(qbr, "Delete File", DANGER_RED, delete_quarantine_file, side="left", padx=4)
 
-q_card = tk.Frame(qc, bg=SURFACE, highlightbackground=BORDER_COLOR, highlightthickness=1)
+q_card = tk.Frame(qc, bg=BG_CARD, highlightbackground=BORDER_COLOR, highlightthickness=1)
 q_card.pack(fill="both", expand=True)
 tk.Label(q_card, text="QUARANTINED FILES", font=("Segoe UI", 10, "bold"),
-         fg=LIGHT_TEXT, bg=SURFACE).pack(anchor="w", padx=16, pady=(14, 0))
+         fg=TEXT_MUTED, bg=BG_CARD).pack(anchor="w", padx=16, pady=(14, 0))
 tk.Frame(q_card, bg=BORDER_COLOR, height=1).pack(fill="x", padx=16, pady=(6, 0))
 quarantine_view = tk.Text(q_card, font=MONO_FONT, height=20, wrap="word",
-                           bg=INPUT_BG, fg="#1f2937", relief="flat", padx=12, pady=10,
-                           state="disabled", highlightbackground=BORDER_COLOR,
-                           highlightthickness=1)
+                          bg=BG_INPUT, fg=TEXT_PRIMARY, relief="flat", padx=12, pady=10,
+                          state="disabled", highlightbackground=BORDER_COLOR,
+                          highlightthickness=1)
 quarantine_view.pack(fill="both", expand=True, padx=16, pady=(8, 16))
 
 # ── FOOTER: SESSION HISTORY ───────────────────────────────────────────────────
