@@ -744,7 +744,7 @@ def refresh_statistics():
     for r in recent:
         ts = r['timestamp'].split('.')[0] if r['timestamp'] else "N/A"
         try:
-            score = float(r['ml_score']) if r['ml_score'] is not None else 0.0
+            score = float(r['confidence']) if r['confidence'] is not None else 0.0
         except (ValueError, TypeError):
             score = 0.0
         history_view.insert("end",
