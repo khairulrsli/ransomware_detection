@@ -261,6 +261,9 @@ def set_progress(status, progress, progress_text):
     status_var.set(status)
     progress_var.set(progress)
     progress_text_var.set(progress_text)
+    prog_info_var.set(progress_text)
+    frac = max(0.0, min(1.0, progress / 100.0))
+    prog_fill.place(relwidth=frac)
 
 
 def compute_threat_score(prediction, early_result, df, events):
@@ -368,16 +371,97 @@ def compute_threat_score(prediction, early_result, df, events):
     return composite, threat_level, signals, metrics
 
 
+def _hide_verdict_cards():
+    verdict_idle.pack_forget()
+    verdict_ransom.pack_forget()
+    verdict_benign.pack_forget()
+
+
+def _show_ransomware_card(composite, cvss_score, cvss_label):
+    _hide_verdict_cards()
+    verdict_score_var.set(f"{composite:.3f}")
+    verdict_cvss_var.set(f"CVSS {cvss_score}")
+    verdict_severity_var.set(cvss_label.upper())
+    verdict_ransom.pack(fill="both", expand=True)
+
+
+def _show_benign_card(composite, cvss_score, cvss_label):
+    _hide_verdict_cards()
+    benign_score_var.set(f"{composite:.3f}")
+    benign_cvss_var.set(f"CVSS {cvss_score}")
+    verdict_benign.pack(fill="both", expand=True)
+
+
+def _update_metrics_panel(ml_score, write_ops, rapid_writes, busy_loops,
+                          network_ops, ioc_items, action_text=None):
+    """Update metrics panel after a scan.
+    ioc_items: list of (name, count, severity) where severity is
+               'critical', 'warning', or 'info'.
+    """
+    ml_conf_var.set(f"{ml_score * 100:.1f}%")
+
+    bar_data = [
+        (ml_score,     1.0),
+        (write_ops,    200.0),
+        (rapid_writes, 10.0),
+        (busy_loops,   20.0),
+        (network_ops,  10.0),
+    ]
+    raw_display = [
+        f"{ml_score:.3f}",
+        str(write_ops),
+        str(rapid_writes),
+        str(busy_loops),
+        str(network_ops),
+    ]
+    for i, ((val, max_val), display) in enumerate(zip(bar_data, raw_display)):
+        bar_value_vars[i].set(display)
+        frac = min(1.0, float(val) / max_val) if max_val > 0 else 0.0
+        bar_fills[i].place(relwidth=frac)
+
+    for w in ioc_badges_frame.winfo_children():
+        w.destroy()
+    if not ioc_items:
+        tk.Label(ioc_badges_frame, text="No indicators triggered",
+                 font=("Segoe UI", 8), fg=TEXT_MUTED, bg=BG_CARD).pack(side="left")
+    else:
+        SEVERITY_STYLE = {
+            "critical": ("#3d0000", DANGER_RED,    "#ff444455"),
+            "warning":  ("#3d1a00", WARN_ORANGE,   "#ffa50055"),
+            "info":     (BG_INPUT,  TEXT_MUTED,    BORDER_COLOR),
+        }
+        for name, count, severity in ioc_items:
+            bg_c, fg_c, bd_c = SEVERITY_STYLE.get(severity, SEVERITY_STYLE["info"])
+            chip = tk.Frame(ioc_badges_frame, bg=bg_c,
+                            highlightbackground=bd_c, highlightthickness=1)
+            chip.pack(side="left", padx=(0, 4), pady=2)
+            tk.Label(chip, text=f"{name} ×{count}",
+                     font=("Segoe UI", 8), fg=fg_c, bg=bg_c,
+                     padx=6, pady=2).pack()
+
+    for w in action_status_frame.winfo_children():
+        w.destroy()
+    if action_text:
+        tk.Label(action_status_frame, text=f"✓  {action_text}",
+                 font=("Segoe UI", 9, "bold"), fg=SUCCESS_GREEN,
+                 bg="#0f1f0f", padx=8, pady=4).pack(side="left")
+        action_status_frame.pack(fill="x", pady=(6, 0))
+    else:
+        action_status_frame.pack_forget()
+
+
 def analyze_in_thread(file_path):
     try:
         file_name = os.path.basename(file_path)
         file_size = os.path.getsize(file_path) / 1024
 
+        run_on_ui(file_path_var.set, file_path, wait=True)
         run_on_ui(current_file.set, f"{file_name}\n({file_size:.1f} KB)", wait=True)
         run_on_ui(set_progress, "Executing behavioral sandbox analysis...", 10, "10% - Running analysis", wait=True)
         run_on_ui(result_var.set, "", wait=True)
-        run_on_ui(result_label.config, bg="#f0f1f4", fg="#6b7280", wait=True)
-        run_on_ui(delete_btn.pack_forget, wait=True)
+        run_on_ui(_hide_verdict_cards, wait=True)
+        run_on_ui(verdict_idle.pack, wait=True)
+        run_on_ui(delete_btn.config, state="disabled", wait=True)
 
         # Known installer names are useful context, but filename alone is not a
         # trustworthy allow-list signal. Continue with analysis either way.
@@ -401,10 +485,8 @@ def analyze_in_thread(file_path):
         df = pd.read_csv(LOG_FILE)
         if len(df) == 0 or "event" not in df.columns:
             run_on_ui(_show_benign, "No activity detected", "BENIGN", "N/A", wait=True)
-            run_on_ui(set_text_widget, metrics_text,
-                "No behavioral events recorded.\n"
-                "File appears benign or exited too quickly.\n"
-            , wait=True)
+            run_on_ui(_show_benign_card, 0.0, 0.0, "None", wait=True)
+            run_on_ui(_update_metrics_panel, 0.0, 0, 0, 0, 0, [], None, wait=True)
             return
 
         # LSTM prediction with enhanced early detection
@@ -494,25 +576,24 @@ def analyze_in_thread(file_path):
                     ioc_lines.append(f"  * {name:<20}: {count} {unit}")
             ioc_section = "\n".join(ioc_lines) if ioc_lines else "  No indicators triggered"
 
-            run_on_ui(set_text_widget, metrics_text,
-                f"Threat Score : {composite:.3f} ({threat_level})"
-                f"   CVSS: {cvss_score} ({cvss_label})\n"
-                f"ML Score     : {prediction:.3f}\n\n"
-                f"Write Ops    : {write_ops}\n"
-                f"Rapid Writes : {rapid_writes}\n"
-                f"Busy Loops   : {busy_loops}\n"
-                f"Network Conn : {network_ops}\n"
-                f"High Entropy : {metrics.get('high_entropy', 0)}\n"
-                f"Canary Hits  : {metrics.get('canary_violations', 0)}\n\n"
-                f"Terminated   : {len(terminated)} processes\n"
-                f"Status       : {'Quarantined' if quarantined else 'Not quarantined'}\n\n"
-                f"IOC INDICATORS\n"
-                f"--------------\n"
-                f"{ioc_section}\n\n"
-                f"CLEANUP\n"
-                f"-------\n"
-                f"{cleanup_section}\n"
-            , wait=True)
+            IOC_SEVERITY = {
+                "CanaryViolation":  "critical",
+                "ShadowCopyDelete": "critical",
+                "RapidFileWrite":   "warning",
+                "HighEntropyFile":  "warning",
+            }
+            ioc_badge_items = []
+            for name, count, unit in ioc_map:
+                if count > 0:
+                    sev = IOC_SEVERITY.get(name, "info")
+                    ioc_badge_items.append((name, count, sev))
+
+            action_str = (f"Process killed · "
+                          f"{'Quarantined' if quarantined else 'Not quarantined'}")
+            run_on_ui(_show_ransomware_card, composite, cvss_score, cvss_label, wait=True)
+            run_on_ui(_update_metrics_panel,
+                      prediction, write_ops, rapid_writes, busy_loops, network_ops,
+                      ioc_badge_items, action_str, wait=True)
 
             if quarantined and quarantine_path:
                 def _delete_permanently(qpath=quarantine_path, fname=file_name):
@@ -526,11 +607,9 @@ def analyze_in_thread(file_path):
                         messagebox.showerror("Error", f"Could not delete: {e}")
                 run_on_ui(delete_btn.config,
                     state="normal",
-                    text="DELETE PERMANENTLY",
                     command=_delete_permanently,
                     wait=True
                 )
-                run_on_ui(delete_btn.pack, pady=8, fill="x", padx=5, wait=True)
 
             if early_result["earliest_alert_window"] is not None:
                 reason = (f"Early detection at call {early_result['earliest_alert_window']} "
@@ -540,10 +619,9 @@ def analyze_in_thread(file_path):
             reason = installer_note + reason
 
             run_on_ui(result_var.set, "RANSOMWARE DETECTED", wait=True)
-            run_on_ui(result_label.config, bg=DANGER_COLOR, fg="white", wait=True)
             run_on_ui(confidence_var.set, f"Score: {composite*100:.1f}% | {threat_level}", wait=True)
             run_on_ui(status_var.set, f"Complete: {reason}", wait=True)
-            run_on_ui(status_label.config, fg=DANGER_COLOR, wait=True)
+            run_on_ui(status_label.config, fg=DANGER_RED, wait=True)
             action = "QUARANTINED" if quarantined else "ALERTED"
             run_on_ui(add_history_entry, file_name, "RANSOMWARE", f"{composite*100:.1f}%", wait=True)
             db.add_analysis(file_name, "RANSOMWARE", composite, prediction,
@@ -569,18 +647,21 @@ def analyze_in_thread(file_path):
                     ioc_lines.append(f"  * {name:<20}: {count} {unit}")
             ioc_section = "\n".join(ioc_lines) if ioc_lines else "  No indicators triggered"
 
-            run_on_ui(set_text_widget, metrics_text,
-                f"Score        : {composite:.3f} (SAFE)"
-                f"   CVSS: {cvss_score} ({cvss_label})\n"
-                f"ML Score     : {prediction:.3f}\n\n"
-                f"Write Ops    : {write_ops}\n"
-                f"Busy Loops   : {busy_loops}\n"
-                f"Network Conn : {network_ops}\n\n"
-                f"FILE SAFE\n\n"
-                f"IOC INDICATORS\n"
-                f"--------------\n"
-                f"{ioc_section}\n"
-            , wait=True)
+            IOC_SEVERITY = {
+                "CanaryViolation":  "critical",
+                "ShadowCopyDelete": "critical",
+                "RapidFileWrite":   "warning",
+                "HighEntropyFile":  "warning",
+            }
+            ioc_badge_items = []
+            for name, count, unit in ioc_map:
+                if count > 0:
+                    sev = IOC_SEVERITY.get(name, "info")
+                    ioc_badge_items.append((name, count, sev))
+            run_on_ui(_show_benign_card, composite, cvss_score, cvss_label, wait=True)
+            run_on_ui(_update_metrics_panel,
+                      prediction, write_ops, rapid_writes, busy_loops, network_ops,
+                      ioc_badge_items, None, wait=True)
             run_on_ui(_show_benign, "Normal application behavior", "BENIGN", f"{composite*100:.1f}%", wait=True)
             db.add_analysis(file_name, "BENIGN FILE", composite, prediction,
                 {'write_ops': write_ops, 'rapid_writes': rapid_writes,
@@ -597,12 +678,13 @@ def analyze_in_thread(file_path):
 
 def _show_benign(reason, history_verdict, history_conf):
     result_var.set("BENIGN FILE")
-    result_label.config(bg=SUCCESS_COLOR, fg="white")
     confidence_var.set(f"Confidence: {history_conf}")
     status_var.set(f"Complete: {reason}")
-    status_label.config(fg=SUCCESS_COLOR)
+    status_label.config(fg=SUCCESS_GREEN)
     progress_var.set(100)
     progress_text_var.set("100% - Complete")
+    prog_info_var.set("100% - Complete")
+    prog_fill.place(relwidth=1.0)
     add_history_entry(
         current_file.get().split("\n")[0],
         history_verdict, history_conf
