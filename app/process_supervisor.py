@@ -127,7 +127,7 @@ def run_in_sandbox(exe_path):
         while True:
             if behavior_logger.early_termination_triggered:
                 print("[!] Early termination flag detected by sandbox runner")
-                _force_kill(process)
+                _force_kill_with_timeout(process)
                 break
 
             if process.poll() is not None:
@@ -136,7 +136,7 @@ def run_in_sandbox(exe_path):
 
             if time.time() - start_time >= 35:
                 print("[!] Process timeout, terminating...")
-                _force_kill(process)
+                _force_kill_with_timeout(process)
                 break
 
             time.sleep(0.25)
@@ -147,25 +147,29 @@ def run_in_sandbox(exe_path):
     except Exception as e:
         print(f"[!] Error executing process: {e}")
         if process is not None:
-            _force_kill(process)
+            _force_kill_with_timeout(process)
         raise
 
 
 def _force_kill(process):
     """Kill a process and all its children aggressively."""
     pid = process.pid
+
+    # taskkill /F /T first — most reliable for deep process trees,
+    # avoids psutil suspend() which can deadlock on ransomware kernel locks
+    try:
+        taskkill = shutil.which("taskkill") or r"C:\Windows\System32\taskkill.exe"
+        subprocess.run(
+            [taskkill, "/F", "/T", "/PID", str(pid)],
+            capture_output=True, timeout=5
+        )
+    except Exception:
+        pass
+
+    # psutil cleanup for any stragglers
     try:
         parent = psutil.Process(pid)
         children = parent.children(recursive=True)
-
-        # Suspend everything first to prevent spawning
-        for p in [parent] + children:
-            try:
-                p.suspend()
-            except Exception:
-                pass
-
-        # Kill everything
         for p in [parent] + children:
             try:
                 p.kill()
@@ -174,19 +178,16 @@ def _force_kill(process):
     except Exception:
         pass
 
-    # Fallback: taskkill /F /T
-    try:
-        taskkill = shutil.which("taskkill") or r"C:\Windows\System32\taskkill.exe"
-        subprocess.run(
-            [taskkill, "/F", "/T", "/PID", str(pid)],
-            capture_output=True, timeout=3
-        )
-    except Exception:
-        pass
-
-    # Final: make sure subprocess object is cleaned up
+    # Ensure subprocess object is cleaned up
     try:
         process.kill()
         process.wait(timeout=3)
     except Exception:
         pass
+
+
+def _force_kill_with_timeout(process, timeout=8):
+    """Run _force_kill in a daemon thread so callers never block on stubborn processes."""
+    t = threading.Thread(target=_force_kill, args=(process,), daemon=True)
+    t.start()
+    t.join(timeout=timeout)

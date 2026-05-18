@@ -384,44 +384,37 @@ def log_behavior(pid=None, duration=35):
             import pandas as pd
 
             def kill_process_now(pid):
-                """Suspend ALL processes first, then kill — prevents spreading"""
-                import subprocess
-                all_procs = []
+                """Kill process tree — runs in daemon thread to avoid blocking logger."""
+                import subprocess, threading
 
-                # Step 1: Collect main process + all children
-                try:
-                    proc = psutil.Process(pid)
-                    all_procs = [proc] + proc.children(recursive=True)
-                except Exception:
-                    pass
-
-                # Step 2: SUSPEND everything first so it cannot spawn more
-                for p in all_procs:
+                def _do_kill():
+                    # taskkill /F /T first — avoids suspend() deadlock on ransomware
                     try:
-                        p.suspend()
-                        print(f"[!] Suspended PID: {p.pid}")
+                        subprocess.run(
+                            ["taskkill", "/F", "/T", "/PID", str(pid)],
+                            capture_output=True, timeout=5
+                        )
+                        print(f"[!] taskkill used on PID: {pid}")
                     except Exception:
                         pass
 
-                # Step 3: Kill all suspended processes
-                for p in all_procs:
+                    # psutil cleanup for stragglers
                     try:
-                        p.kill()
-                        print(f"[!] Killed PID: {p.pid}")
+                        proc = psutil.Process(pid)
+                        for p in [proc] + proc.children(recursive=True):
+                            try:
+                                p.kill()
+                                print(f"[!] Killed PID: {p.pid}")
+                            except Exception:
+                                pass
                     except Exception:
                         pass
 
-                # Step 4: taskkill /F /T as final fallback
-                try:
-                    subprocess.run(
-                        ["taskkill", "/F", "/T", "/PID", str(pid)],
-                        capture_output=True, timeout=3
-                    )
-                    print(f"[!] taskkill fallback used on PID: {pid}")
-                except Exception:
-                    pass
+                    print(f"[+] Process tree neutralised for PID: {pid}")
 
-                print(f"[✓] Process tree neutralised for PID: {pid}")
+                t = threading.Thread(target=_do_kill, daemon=True)
+                t.start()
+                t.join(timeout=8)
 
             # TIER 1: Canary violation or shadow copy deletion → IMMEDIATE KILL
             if canary_violations >= 1:

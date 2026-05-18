@@ -38,7 +38,7 @@ class ForceKillTests(unittest.TestCase):
 
         mock_proc.kill.assert_called()
 
-    def test_kills_children_before_parent(self):
+    def test_kills_children_via_psutil(self):
         mock_child = MagicMock()
         mock_child.pid = 5678
         mock_parent_psutil = MagicMock()
@@ -50,49 +50,39 @@ class ForceKillTests(unittest.TestCase):
              patch("process_supervisor.subprocess.run"):
             process_supervisor._force_kill(mock_proc)
 
-        mock_child.suspend.assert_called()
         mock_child.kill.assert_called()
+        mock_child.suspend.assert_not_called()
 
-    def test_suspend_called_before_kill(self):
+    def test_taskkill_called_first_with_correct_args(self):
         call_order = []
-        mock_child = MagicMock()
-        mock_child.suspend.side_effect = lambda: call_order.append("suspend")
-        mock_child.kill.side_effect = lambda: call_order.append("kill")
-
-        mock_parent_psutil = MagicMock()
-        mock_parent_psutil.suspend.side_effect = lambda: call_order.append("parent_suspend")
-        mock_parent_psutil.kill.side_effect = lambda: call_order.append("parent_kill")
-        mock_parent_psutil.children.return_value = [mock_child]
-
-        mock_proc = self._make_mock_process()
-
-        with patch("process_supervisor.psutil.Process", return_value=mock_parent_psutil), \
-             patch("process_supervisor.subprocess.run"):
-            process_supervisor._force_kill(mock_proc)
-
-        # All suspends should happen before any kills
-        last_suspend = max(
-            (i for i, v in enumerate(call_order) if "suspend" in v),
-            default=-1
-        )
-        first_kill = min(
-            (i for i, v in enumerate(call_order) if "kill" in v),
-            default=len(call_order)
-        )
-        self.assertLess(last_suspend, first_kill)
-
-    def test_taskkill_called_as_fallback(self):
         mock_proc = self._make_mock_process(pid=9999)
-        with patch("process_supervisor.psutil.Process",
-                   side_effect=psutil.NoSuchProcess(9999)), \
-             patch("process_supervisor.subprocess.run") as mock_run, \
+
+        mock_psutil = MagicMock()
+        mock_psutil.children.return_value = []
+
+        def _record_run(args, **kwargs):
+            call_order.append(("taskkill", args))
+            return MagicMock()
+
+        def _record_psutil(pid):
+            call_order.append(("psutil", pid))
+            return mock_psutil
+
+        with patch("process_supervisor.psutil.Process", side_effect=_record_psutil), \
+             patch("process_supervisor.subprocess.run", side_effect=_record_run), \
              patch("process_supervisor.shutil.which", return_value=r"C:\Windows\System32\taskkill.exe"):
             process_supervisor._force_kill(mock_proc)
 
-        args = mock_run.call_args[0][0]
-        self.assertIn("/F", args)
-        self.assertIn("/T", args)
-        self.assertIn("9999", args)
+        # taskkill must come before psutil
+        taskkill_idx = next(i for i, (k, _) in enumerate(call_order) if k == "taskkill")
+        psutil_idx = next(i for i, (k, _) in enumerate(call_order) if k == "psutil")
+        self.assertLess(taskkill_idx, psutil_idx)
+
+        # verify /F /T /PID 9999 in taskkill args
+        tk_args = call_order[taskkill_idx][1]
+        self.assertIn("/F", tk_args)
+        self.assertIn("/T", tk_args)
+        self.assertIn("9999", tk_args)
 
     def test_force_kill_survives_all_exceptions(self):
         mock_proc = self._make_mock_process()
