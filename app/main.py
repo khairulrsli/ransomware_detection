@@ -433,8 +433,26 @@ def analyze_in_thread(file_path):
             if quarantined:
                 db.add_quarantine(file_name, quarantine_path, file_path, threat_level)
 
+            cvss_score, cvss_label = cvss_severity(composite)
+
+            ioc_lines = []
+            ioc_map = [
+                ("RapidFileWrite",   rapid_writes,                          "events"),
+                ("HighEntropyFile",  metrics.get("high_entropy", 0),        "files"),
+                ("CanaryViolation",  metrics.get("canary_violations", 0),   "hits"),
+                ("ShadowCopyDelete", metrics.get("shadow_deletes", 0),      "events"),
+                ("NetworkConnect",   network_ops,                           "outbound"),
+                ("SuspiciousChild",  metrics.get("suspicious_children", 0), "processes"),
+                ("BusyLoop",         busy_loops,                            "events"),
+            ]
+            for name, count, unit in ioc_map:
+                if count > 0:
+                    ioc_lines.append(f"  * {name:<20}: {count} {unit}")
+            ioc_section = "\n".join(ioc_lines) if ioc_lines else "  No indicators triggered"
+
             run_on_ui(set_text_widget, metrics_text,
-                f"Threat Score : {composite:.3f} ({threat_level})\n"
+                f"Threat Score : {composite:.3f} ({threat_level})"
+                f"   CVSS: {cvss_score} ({cvss_label})\n"
                 f"ML Score     : {prediction:.3f}\n\n"
                 f"Write Ops    : {write_ops}\n"
                 f"Rapid Writes : {rapid_writes}\n"
@@ -443,7 +461,10 @@ def analyze_in_thread(file_path):
                 f"High Entropy : {metrics.get('high_entropy', 0)}\n"
                 f"Canary Hits  : {metrics.get('canary_violations', 0)}\n\n"
                 f"Terminated   : {len(terminated)} processes\n"
-                f"Status       : {'Quarantined' if quarantined else 'Not quarantined'}\n"
+                f"Status       : {'Quarantined' if quarantined else 'Not quarantined'}\n\n"
+                f"IOC INDICATORS\n"
+                f"--------------\n"
+                f"{ioc_section}\n"
             , wait=True)
 
             if quarantined and quarantine_path:
@@ -484,13 +505,34 @@ def analyze_in_thread(file_path):
                 action, reason)
 
         else:
+            cvss_score, cvss_label = cvss_severity(composite)
+
+            ioc_lines = []
+            ioc_map = [
+                ("RapidFileWrite",   rapid_writes,                          "events"),
+                ("HighEntropyFile",  metrics.get("high_entropy", 0),        "files"),
+                ("CanaryViolation",  metrics.get("canary_violations", 0),   "hits"),
+                ("ShadowCopyDelete", metrics.get("shadow_deletes", 0),      "events"),
+                ("NetworkConnect",   network_ops,                           "outbound"),
+                ("SuspiciousChild",  metrics.get("suspicious_children", 0), "processes"),
+                ("BusyLoop",         busy_loops,                            "events"),
+            ]
+            for name, count, unit in ioc_map:
+                if count > 0:
+                    ioc_lines.append(f"  * {name:<20}: {count} {unit}")
+            ioc_section = "\n".join(ioc_lines) if ioc_lines else "  No indicators triggered"
+
             run_on_ui(set_text_widget, metrics_text,
-                f"Score        : {composite:.3f} (SAFE)\n"
+                f"Score        : {composite:.3f} (SAFE)"
+                f"   CVSS: {cvss_score} ({cvss_label})\n"
                 f"ML Score     : {prediction:.3f}\n\n"
                 f"Write Ops    : {write_ops}\n"
                 f"Busy Loops   : {busy_loops}\n"
                 f"Network Conn : {network_ops}\n\n"
-                f"FILE SAFE\n"
+                f"FILE SAFE\n\n"
+                f"IOC INDICATORS\n"
+                f"--------------\n"
+                f"{ioc_section}\n"
             , wait=True)
             run_on_ui(_show_benign, "Normal application behavior", "BENIGN", f"{composite*100:.1f}%", wait=True)
             db.add_analysis(file_name, "BENIGN FILE", composite, prediction,
