@@ -16,6 +16,7 @@ from early_detection import predict_early_windows, DEFAULT_WINDOWS
 from datetime import datetime
 from threat_database import db
 import re
+import fnmatch
 
 APP_DIR    = os.path.dirname(os.path.abspath(__file__))
 PARENT_DIR = os.path.dirname(APP_DIR)
@@ -184,6 +185,41 @@ def quarantine_file(file_path, file_name):
     except Exception as e:
         print(f"[!] Quarantine failed: {e}")
     return False, None
+
+
+# Known ransomware-dropped component patterns: (glob, human label)
+RANSOMWARE_DROP_PATTERNS = [
+    ("*.wnry",     "WannaCry component"),
+    ("taskdl.exe", "WannaCry task deleter"),
+    ("taskse.exe", "WannaCry worm spreader"),
+]
+
+
+def scan_dropped_files(scan_dirs, skip_path=None):
+    """
+    Find known ransomware-dropped files in the given directories.
+    Returns list of (abs_path, filename, label).
+    skip_path: absolute path to exclude (the already-quarantined main file).
+    """
+    found = []
+    skip_abs = os.path.abspath(skip_path) if skip_path else None
+    for directory in scan_dirs:
+        if not os.path.isdir(directory):
+            continue
+        try:
+            for fname in os.listdir(directory):
+                fpath = os.path.join(directory, fname)
+                if not os.path.isfile(fpath):
+                    continue
+                if skip_abs and os.path.abspath(fpath) == skip_abs:
+                    continue
+                for pattern, label in RANSOMWARE_DROP_PATTERNS:
+                    if fnmatch.fnmatch(fname.lower(), pattern.lower()):
+                        found.append((fpath, fname, label))
+                        break
+        except (OSError, PermissionError):
+            pass
+    return found
 
 
 def run_on_ui(callback, *args, wait=False, **kwargs):
@@ -433,6 +469,24 @@ def analyze_in_thread(file_path):
             if quarantined:
                 db.add_quarantine(file_name, quarantine_path, file_path, threat_level)
 
+            # Scan for and quarantine dropped components (e.g. WannaCry *.wnry, taskdl.exe)
+            drop_scan_dirs = list({
+                os.path.dirname(file_path),
+                os.path.expanduser("~/Downloads"),
+                os.path.expanduser("~/Desktop"),
+                os.environ.get("TEMP", ""),
+            })
+            dropped_found = scan_dropped_files(drop_scan_dirs, skip_path=file_path)
+            dropped_lines = []
+            for fpath, fname, label in dropped_found:
+                ok, qpath = quarantine_file(fpath, fname)
+                status = "quarantined" if ok else "locked"
+                if ok:
+                    db.add_quarantine(fname, qpath, fpath, f"DROPPED:{threat_level}")
+                    print(f"[+] Dropped component quarantined: {fname}")
+                dropped_lines.append(f"  * {fname:<22}: {label} [{status}]")
+            cleanup_section = "\n".join(dropped_lines) if dropped_lines else "  No dropped components found"
+
             cvss_score, cvss_label = cvss_severity(composite)
 
             ioc_lines = []
@@ -464,7 +518,10 @@ def analyze_in_thread(file_path):
                 f"Status       : {'Quarantined' if quarantined else 'Not quarantined'}\n\n"
                 f"IOC INDICATORS\n"
                 f"--------------\n"
-                f"{ioc_section}\n"
+                f"{ioc_section}\n\n"
+                f"CLEANUP\n"
+                f"-------\n"
+                f"{cleanup_section}\n"
             , wait=True)
 
             if quarantined and quarantine_path:

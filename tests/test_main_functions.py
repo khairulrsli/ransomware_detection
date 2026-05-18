@@ -357,6 +357,44 @@ class TestCvssSeverity(unittest.TestCase):
         self.assertEqual(main.cvss_severity(0.90)[1], "Critical")
 
 
+class TestScanDroppedFiles(unittest.TestCase):
+    def test_finds_wnry_files(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for name in ("b.wnry", "c.wnry", "taskdl.exe", "normal.exe"):
+                open(os.path.join(tmpdir, name), "w").close()
+            found = main.scan_dropped_files([tmpdir])
+        names = [f for _, f, _ in found]
+        self.assertIn("b.wnry", names)
+        self.assertIn("c.wnry", names)
+        self.assertIn("taskdl.exe", names)
+        self.assertNotIn("normal.exe", names)
+
+    def test_skips_skip_path(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            skip = os.path.join(tmpdir, "taskdl.exe")
+            open(skip, "w").close()
+            open(os.path.join(tmpdir, "taskse.exe"), "w").close()
+            found = main.scan_dropped_files([tmpdir], skip_path=skip)
+        names = [f for _, f, _ in found]
+        self.assertNotIn("taskdl.exe", names)
+        self.assertIn("taskse.exe", names)
+
+    def test_empty_dir_returns_empty(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            found = main.scan_dropped_files([tmpdir])
+        self.assertEqual(found, [])
+
+    def test_nonexistent_dir_ignored(self):
+        found = main.scan_dropped_files(["/does/not/exist"])
+        self.assertEqual(found, [])
+
+    def test_label_returned(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            open(os.path.join(tmpdir, "taskse.exe"), "w").close()
+            found = main.scan_dropped_files([tmpdir])
+        self.assertEqual(found[0][2], "WannaCry worm spreader")
+
+
 class TestKillProcessTree(unittest.TestCase):
     def _make_proc(self, exe, pid):
         p = MagicMock()
