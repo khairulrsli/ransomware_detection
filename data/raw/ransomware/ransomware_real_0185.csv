@@ -1,0 +1,144 @@
+timestamp,pid,event
+0,2185,DllMain
+1,2185,DllMain
+2,2185,DllMain
+3,2185,RtlNtStatusToDosError
+4,2185,RtlSetLastWin32Error
+5,2185,DllMain
+6,2185,DllMain
+7,2185,RtlInitUnicodeString
+8,2185,LdrGetDllHandle
+9,2185,DllMain
+10,2185,DllMain
+11,2185,DllMain
+12,2185,DllMain
+13,2185,DllMain
+14,2185,DllMain
+15,2185,DllMain
+16,2185,DllMain
+17,2185,DllMain
+18,2185,DllMain
+19,2185,DllMain
+20,2185,DllMain
+21,2185,GetModuleHandleW
+22,2185,DllMain
+23,2185,DllMain
+24,2185,DllMain
+25,2185,GetVersion
+26,2185,HeapCreate
+27,2185,RtlCreateHeap
+28,2185,GetVersionExA
+29,2185,memset
+30,2185,RtlGetVersion
+31,2185,TlsAlloc
+32,2185,RtlAcquirePebLock
+33,2185,RtlFindClearBitsAndSet
+34,2185,RtlReleasePebLock
+35,2185,TlsSetValue
+36,2185,GetCurrentThreadId
+37,2185,GetStartupInfoA
+38,2185,RtlAllocateHeap
+39,2185,RtlUnicodeStringToAnsiString
+40,2185,RtlUnicodeStringToAnsiString
+41,2185,RtlUnicodeStringToAnsiString
+42,2185,GetStdHandle
+43,2185,GetFileType
+44,2185,RtlNtStatusToDosError
+45,2185,RtlSetLastWin32Error
+46,2185,GetStdHandle
+47,2185,GetFileType
+48,2185,RtlNtStatusToDosError
+49,2185,RtlSetLastWin32Error
+50,2185,GetStdHandle
+51,2185,GetFileType
+52,2185,RtlNtStatusToDosError
+53,2185,RtlSetLastWin32Error
+54,2185,SetHandleCount
+55,2185,GetCommandLineA
+56,2185,GetEnvironmentStringsW
+57,2185,RtlAcquirePebLock
+58,2185,RtlAllocateHeap
+59,2185,memcpy
+60,2185,RtlReleasePebLock
+61,2185,WideCharToMultiByte
+62,2185,WideCharToMultiByte
+63,2185,FreeEnvironmentStringsW
+64,2185,RtlFreeHeap
+65,2185,GetACP
+66,2185,GetCPInfo
+67,2185,GetCPInfo
+68,2185,GetStringTypeW
+69,2185,MultiByteToWideChar
+70,2185," !""#$%&'"
+71,2185,MultiByteToWideChar
+72,2185," !""#$%&'"
+73,2185,GetStringTypeW
+74,2185," !""#$%&'"
+75,2185,LCMapStringW
+76,2185,MultiByteToWideChar
+77,2185," !""#$%&'"
+78,2185,MultiByteToWideChar
+79,2185," !""#$%&'"
+80,2185,LCMapStringW
+81,2185," !""#$%&'"
+82,2185,LCMapStringW
+83,2185," !""#$%&'"
+84,2185,WideCharToMultiByte
+85,2185," !""#$%&'"
+86,2185,RtlAllocateHeap
+87,2185,RtlFreeHeap
+88,2185,MultiByteToWideChar
+89,2185," !""#$%&'"
+90,2185,MultiByteToWideChar
+91,2185," !""#$%&'"
+92,2185,LCMapStringW
+93,2185," !""#$%&'"
+94,2185,LCMapStringW
+95,2185," !""#$%&'"
+96,2185,WideCharToMultiByte
+97,2185," !""#$%&'"
+98,2185,RtlAllocateHeap
+99,2185,RtlFreeHeap
+100,2185,GetModuleFileNameA
+101,2185,RtlAllocateHeap
+102,2185,RtlSetLastWin32Error
+103,2185,RtlUnicodeStringToAnsiString
+104,2185,RtlFreeHeap
+105,2185,HeapFree
+106,2185,SetUnhandledExceptionFilter
+107,2185,NtQueryVirtualMemory
+108,2185,NtQueryVirtualMemory
+109,2185,NtQueryVirtualMemory
+110,2185,RtlAllocateHeap
+111,2185,RtlEncodePointer
+112,2185,RtlAcquireSRWLockExclusive
+113,2185,RtlReleaseSRWLockExclusive
+114,2185,RtlDecodePointer
+115,2185,FindWindowA
+116,2185,RtlAllocateHeap
+117,2185,RtlMultiByteToUnicodeN
+118,2185,RtlEnterCriticalSection
+119,2185,RtlLeaveCriticalSection
+120,2185,RtlFreeHeap
+121,2185,GetVersionExA
+122,2185,memset
+123,2185,RtlGetVersion
+124,2185,GetModuleHandleA
+125,2185,RtlInitAnsiStringEx
+126,2185,RtlAnsiStringToUnicodeString
+127,2185,RtlInitUnicodeString
+128,2185,LdrGetDllHandle
+129,2185,RtlFreeUnicodeString
+130,2185,AcquireSRWLockExclusive
+131,2185,MultiByteToWideChar
+132,2185,GetProcessHeap
+133,2185,HeapAlloc
+134,2185,MultiByteToWideChar
+135,2185,_wcsicmp
+136,2185,_wcsicmp
+137,2185,GetProcessHeap
+138,2185,HeapFree
+139,2185,GetProcAddress
+140,2185,RtlInitString
+141,2185,RtlNtStatusToDosError
+142,2185,RtlSetLastWin32Error

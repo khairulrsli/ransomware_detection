@@ -8,7 +8,7 @@ REPORT_DIR = os.path.join(ROOT_DIR, "reports")
 
 
 def read_text(path):
-    with open(path, "r", encoding="utf-8") as file:
+    with open(path, "r", encoding="utf-8", errors="replace") as file:
         return file.read()
 
 
