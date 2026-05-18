@@ -783,23 +783,38 @@ root.title("Ransomware Detection System")
 root.geometry("1120x860")
 root.resizable(True, True)
 
-# ── THEME PALETTE (Light) ──────────────────────────────────────────────────────
-BG_DARK         = "#f3f4f6"      # main background
-SURFACE         = "#ffffff"      # cards / panels
-SURFACE_LIGHT   = "#f0f1f4"      # inset areas
-BORDER_COLOR    = "#e1e4e8"      # subtle borders
-PRIMARY_COLOR   = "#6366f1"      # indigo accent
-SECONDARY_COLOR = "#818cf8"      # lighter indigo
-SUCCESS_COLOR   = "#16a34a"      # green
-DANGER_COLOR    = "#dc2626"      # red
-WARNING_COLOR   = "#d97706"      # amber
-BG_COLOR        = "#f3f4f6"
-DARK_TEXT        = "#1f2937"      # dark text
-LIGHT_TEXT       = "#6b7280"      # muted text
-INPUT_BG         = "#f9fafb"      # input / text area bg
-HEADER_BG        = "#1e293b"      # dark header / footer
+# ── THEME PALETTE (Dark / Cyber) ──────────────────────────────────────────────
+BG_DEEP         = "#0d1117"   # window background
+BG_CARD         = "#161b22"   # card / panel backgrounds
+BG_INPUT        = "#21262d"   # input fields, progress track
+BORDER_COLOR    = "#30363d"   # all card/panel borders
+TEXT_PRIMARY    = "#e6edf3"   # primary text
+TEXT_MUTED      = "#8b949e"   # labels, secondary text
+ACCENT_BLUE     = "#58a6ff"   # accent, links
+DANGER_RED      = "#ff4444"   # ransomware verdict, critical IOCs
+WARN_ORANGE     = "#ffa500"   # warning IOCs
+SUCCESS_GREEN   = "#3fb950"   # benign verdict, quarantine confirmed
+BTN_BLUE        = "#1f6feb"   # primary action button fill
+BTN_BLUE_BORDER = "#388bfd"
+DANGER_DARK     = "#1a0000"   # ransomware card background
+SUCCESS_DARK    = "#0f3d1f"   # benign card background
 
-root.config(bg=BG_DARK)
+# Aliases kept so existing references compile unchanged
+BG_DARK         = BG_DEEP
+SURFACE         = BG_CARD
+SURFACE_LIGHT   = BG_INPUT
+PRIMARY_COLOR   = ACCENT_BLUE
+SECONDARY_COLOR = ACCENT_BLUE
+SUCCESS_COLOR   = SUCCESS_GREEN
+DANGER_COLOR    = DANGER_RED
+WARNING_COLOR   = WARN_ORANGE
+BG_COLOR        = BG_DEEP
+DARK_TEXT       = TEXT_PRIMARY
+LIGHT_TEXT      = TEXT_MUTED
+INPUT_BG        = BG_INPUT
+HEADER_BG       = BG_CARD
+
+root.config(bg=BG_DEEP)
 
 TITLE_FONT  = ("Segoe UI", 18, "bold")
 HEADER_FONT = ("Segoe UI", 12, "bold")
