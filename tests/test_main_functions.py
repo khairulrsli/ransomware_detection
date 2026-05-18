@@ -332,6 +332,31 @@ class TestComputeThreatScore(unittest.TestCase):
         self.assertAlmostEqual(signals["rapid_signal"], 0.0)
 
 
+class TestCvssSeverity(unittest.TestCase):
+    def test_none(self):
+        self.assertEqual(main.cvss_severity(0.0), (0.0, "None"))
+
+    def test_low(self):
+        self.assertEqual(main.cvss_severity(0.2), (2.0, "Low"))
+
+    def test_medium(self):
+        self.assertEqual(main.cvss_severity(0.5), (5.0, "Medium"))
+
+    def test_high(self):
+        self.assertEqual(main.cvss_severity(0.75), (7.5, "High"))
+
+    def test_critical(self):
+        self.assertEqual(main.cvss_severity(0.95), (9.5, "Critical"))
+
+    def test_boundary_medium_low(self):
+        self.assertEqual(main.cvss_severity(0.39)[1], "Low")
+        self.assertEqual(main.cvss_severity(0.40)[1], "Medium")
+
+    def test_boundary_high_critical(self):
+        self.assertEqual(main.cvss_severity(0.89)[1], "High")
+        self.assertEqual(main.cvss_severity(0.90)[1], "Critical")
+
+
 class TestKillProcessTree(unittest.TestCase):
     def _make_proc(self, exe, pid):
         p = MagicMock()

@@ -25,6 +25,23 @@ LOG_FILE   = os.path.join(PARENT_DIR, "logs", "api_logs.csv")
 APP_DETECTION_THRESHOLD = 0.25  # Calibrated: best precision/FP tradeoff on real-only test set
 ML_ALERT_THRESHOLD = 0.5
 
+
+def cvss_severity(composite: float):
+    """Convert composite score [0-1] to CVSS v3.1 score [0-10] and severity label."""
+    score = round(composite * 10, 1)
+    if score == 0.0:
+        label = "None"
+    elif score < 4.0:
+        label = "Low"
+    elif score < 7.0:
+        label = "Medium"
+    elif score < 9.0:
+        label = "High"
+    else:
+        label = "Critical"
+    return score, label
+
+
 # ── WHITELIST ──────────────────────────────────────────────────────────────────
 LEGITIMATE_INSTALLERS = {
     'chrome':        r'chromesetup|chrome.*installer|googlechrome',
