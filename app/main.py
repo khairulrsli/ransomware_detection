@@ -426,8 +426,8 @@ def _update_metrics_panel(ml_score, write_ops, rapid_writes, busy_loops,
                  font=("Segoe UI", 8), fg=TEXT_MUTED, bg=BG_CARD).pack(side="left")
     else:
         SEVERITY_STYLE = {
-            "critical": ("#3d0000", DANGER_RED,    "#7a0000"),
-            "warning":  ("#3d1a00", WARN_ORANGE,   "#7a4400"),
+            "critical": ("#fee2e2", DANGER_RED,    "#fca5a5"),
+            "warning":  ("#fff7ed", WARN_ORANGE,   "#fed7aa"),
             "info":     (BG_INPUT,  TEXT_MUTED,    BORDER_COLOR),
         }
         for name, count, severity in ioc_items:
@@ -868,25 +868,25 @@ root.title("Ransomware Detection System")
 root.geometry("1120x860")
 root.resizable(True, True)
 
-# ── THEME PALETTE (Dark / Cyber) ──────────────────────────────────────────────
-BG_DEEP         = "#0d1117"   # window background
-BG_CARD         = "#161b22"   # card / panel backgrounds
-BG_INPUT        = "#21262d"   # input fields, progress track
-BORDER_COLOR    = "#30363d"   # all card/panel borders
-TEXT_PRIMARY    = "#e6edf3"   # primary text
-TEXT_MUTED      = "#8b949e"   # labels, secondary text
-ACCENT_BLUE     = "#58a6ff"   # accent, links
-DANGER_RED      = "#ff4444"   # ransomware verdict, critical IOCs
-WARN_ORANGE     = "#ffa500"   # warning IOCs
-SUCCESS_GREEN   = "#3fb950"   # benign verdict, quarantine confirmed
-BTN_BLUE        = "#1f6feb"   # primary action button fill
-BTN_BLUE_BORDER = "#388bfd"
-DANGER_DARK     = "#1a0000"   # ransomware card background
-RANSOM_INNER    = "#2a0000"      # inner accent in ransomware card
-SUCCESS_DARK    = "#0f3d1f"      # benign card background
-BENIGN_INNER    = "#0a2a12"      # inner accent in benign card
-ACTION_BG       = "#0f1f0f"      # action status row background
-ACTION_BORDER   = "#238636"      # action status row border
+# ── THEME PALETTE (Light) ─────────────────────────────────────────────────────
+BG_DEEP         = "#f3f4f6"   # window background
+BG_CARD         = "#ffffff"   # card / panel backgrounds
+BG_INPUT        = "#f9fafb"   # input fields, progress track
+BORDER_COLOR    = "#e1e4e8"   # all card/panel borders
+TEXT_PRIMARY    = "#1f2937"   # primary text
+TEXT_MUTED      = "#6b7280"   # labels, secondary text
+ACCENT_BLUE     = "#6366f1"   # accent, links
+DANGER_RED      = "#dc2626"   # ransomware verdict, critical IOCs
+WARN_ORANGE     = "#d97706"   # warning IOCs
+SUCCESS_GREEN   = "#16a34a"   # benign verdict, quarantine confirmed
+BTN_BLUE        = "#6366f1"   # primary action button fill
+BTN_BLUE_BORDER = "#818cf8"
+DANGER_DARK     = "#fee2e2"   # ransomware card background
+RANSOM_INNER    = "#fecaca"      # inner accent in ransomware card
+SUCCESS_DARK    = "#dcfce7"      # benign card background
+BENIGN_INNER    = "#bbf7d0"      # inner accent in benign card
+ACTION_BG       = "#f0fdf4"      # action status row background
+ACTION_BORDER   = "#86efac"      # action status row border
 
 # Aliases kept so existing references compile unchanged
 BG_DARK         = BG_DEEP
@@ -1065,7 +1065,7 @@ tk.Label(vr, text="⚠", font=("Segoe UI", 20), fg=DANGER_RED,
 tk.Label(vr, text="RANSOMWARE", font=("Segoe UI", 9, "bold"),
          fg=DANGER_RED, bg=DANGER_DARK).pack()
 tk.Label(vr, text="DETECTED", font=("Segoe UI", 8),
-         fg="#aa3333", bg=DANGER_DARK).pack(pady=(0, 8))
+         fg="#991b1b", bg=DANGER_DARK).pack(pady=(0, 8))
 vr_score_frame = tk.Frame(vr, bg=RANSOM_INNER)
 vr_score_frame.pack(fill="x", pady=(0, 4))
 tk.Label(vr_score_frame, text="THREAT SCORE", font=("Segoe UI", 7),
@@ -1103,7 +1103,7 @@ tk.Label(vb, text="✓", font=("Segoe UI", 20), fg=SUCCESS_GREEN,
 tk.Label(vb, text="SAFE", font=("Segoe UI", 9, "bold"),
          fg=SUCCESS_GREEN, bg=SUCCESS_DARK).pack()
 tk.Label(vb, text="BENIGN", font=("Segoe UI", 8),
-         fg="#267a3a", bg=SUCCESS_DARK).pack(pady=(0, 8))
+         fg="#15803d", bg=SUCCESS_DARK).pack(pady=(0, 8))
 vb_score_frame = tk.Frame(vb, bg=BENIGN_INNER)
 vb_score_frame.pack(fill="x", pady=(0, 4))
 tk.Label(vb_score_frame, text="THREAT SCORE", font=("Segoe UI", 7),
