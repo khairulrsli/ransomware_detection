@@ -854,14 +854,14 @@ analysis_history  = []
 # ── TTK STYLES ─────────────────────────────────────────────────────────────────
 style = ttk.Style()
 style.theme_use("clam")
-style.configure("TNotebook", background=BG_DARK, borderwidth=0)
-style.configure("TNotebook.Tab", background="#e5e7eb", foreground=LIGHT_TEXT,
+style.configure("TNotebook", background=BG_DEEP, borderwidth=0)
+style.configure("TNotebook.Tab", background=BG_CARD, foreground=TEXT_MUTED,
                 padding=[18, 10], font=BTN_FONT, borderwidth=0)
 style.map("TNotebook.Tab",
-           background=[("selected", SURFACE)],
-           foreground=[("selected", "#1f2937")])
+          background=[("selected", BG_DEEP)],
+          foreground=[("selected", ACCENT_BLUE)])
 style.configure("Custom.Horizontal.TProgressbar",
-                background=PRIMARY_COLOR, troughcolor=SURFACE_LIGHT,
+                background=ACCENT_BLUE, troughcolor=BG_INPUT,
                 borderwidth=0, thickness=8)
 
 # ── HEADER ─────────────────────────────────────────────────────────────────────
@@ -896,9 +896,9 @@ notebook = ttk.Notebook(root)
 notebook.pack(fill="both", expand=True, padx=14, pady=(14, 0))
 
 # ── TAB 1: ANALYSIS ───────────────────────────────────────────────────────────
-at = tk.Frame(notebook, bg=BG_DARK)
+at = tk.Frame(notebook, bg=BG_DEEP)
 notebook.add(at, text="  Analysis  ")
-ac = tk.Frame(at, bg=BG_DARK)
+ac = tk.Frame(at, bg=BG_DEEP)
 ac.pack(fill="both", expand=True, padx=8, pady=10)
 
 # Left panel
@@ -980,9 +980,9 @@ metrics_text = tk.Text(ms, font=MONO_FONT, height=18, width=36,
 metrics_text.pack(fill="both", expand=True)
 
 # ── TAB 2: STATISTICS ─────────────────────────────────────────────────────────
-st_tab = tk.Frame(notebook, bg=BG_DARK)
+st_tab = tk.Frame(notebook, bg=BG_DEEP)
 notebook.add(st_tab, text="  Statistics  ")
-sc = tk.Frame(st_tab, bg=BG_DARK)
+sc = tk.Frame(st_tab, bg=BG_DEEP)
 sc.pack(fill="both", expand=True, padx=14, pady=14)
 
 stats_card = tk.Frame(sc, bg=SURFACE, highlightbackground=BORDER_COLOR, highlightthickness=1)
@@ -1014,9 +1014,9 @@ history_view = tk.Text(hist_card, font=MONO_FONT, height=16, wrap="word",
 history_view.pack(fill="both", expand=True, padx=16, pady=(8, 16))
 
 # ── TAB 3: QUARANTINE ─────────────────────────────────────────────────────────
-qt_tab = tk.Frame(notebook, bg=BG_DARK)
+qt_tab = tk.Frame(notebook, bg=BG_DEEP)
 notebook.add(qt_tab, text="  Quarantine  ")
-qc = tk.Frame(qt_tab, bg=BG_DARK)
+qc = tk.Frame(qt_tab, bg=BG_DEEP)
 qc.pack(fill="both", expand=True, padx=14, pady=14)
 
 qbr = tk.Frame(qc, bg=BG_DARK)
