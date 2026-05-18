@@ -426,8 +426,8 @@ def _update_metrics_panel(ml_score, write_ops, rapid_writes, busy_loops,
                  font=("Segoe UI", 8), fg=TEXT_MUTED, bg=BG_CARD).pack(side="left")
     else:
         SEVERITY_STYLE = {
-            "critical": ("#3d0000", DANGER_RED,    "#ff444455"),
-            "warning":  ("#3d1a00", WARN_ORANGE,   "#ffa50055"),
+            "critical": ("#3d0000", DANGER_RED,    "#7a0000"),
+            "warning":  ("#3d1a00", WARN_ORANGE,   "#7a4400"),
             "info":     (BG_INPUT,  TEXT_MUTED,    BORDER_COLOR),
         }
         for name, count, severity in ioc_items:
@@ -882,11 +882,11 @@ SUCCESS_GREEN   = "#3fb950"   # benign verdict, quarantine confirmed
 BTN_BLUE        = "#1f6feb"   # primary action button fill
 BTN_BLUE_BORDER = "#388bfd"
 DANGER_DARK     = "#1a0000"   # ransomware card background
-RANSOM_INNER    = RANSOM_INNER   # inner accent in ransomware card
-SUCCESS_DARK    = SUCCESS_DARK   # benign card background
-BENIGN_INNER    = BENIGN_INNER   # inner accent in benign card
-ACTION_BG       = ACTION_BG   # action status row background
-ACTION_BORDER   = ACTION_BORDER   # action status row border
+RANSOM_INNER    = "#2a0000"      # inner accent in ransomware card
+SUCCESS_DARK    = "#0f3d1f"      # benign card background
+BENIGN_INNER    = "#0a2a12"      # inner accent in benign card
+ACTION_BG       = "#0f1f0f"      # action status row background
+ACTION_BORDER   = "#238636"      # action status row border
 
 # Aliases kept so existing references compile unchanged
 BG_DARK         = BG_DEEP
@@ -1065,7 +1065,7 @@ tk.Label(vr, text="⚠", font=("Segoe UI", 20), fg=DANGER_RED,
 tk.Label(vr, text="RANSOMWARE", font=("Segoe UI", 9, "bold"),
          fg=DANGER_RED, bg=DANGER_DARK).pack()
 tk.Label(vr, text="DETECTED", font=("Segoe UI", 8),
-         fg="#ff666688", bg=DANGER_DARK).pack(pady=(0, 8))
+         fg="#aa3333", bg=DANGER_DARK).pack(pady=(0, 8))
 vr_score_frame = tk.Frame(vr, bg=RANSOM_INNER)
 vr_score_frame.pack(fill="x", pady=(0, 4))
 tk.Label(vr_score_frame, text="THREAT SCORE", font=("Segoe UI", 7),
@@ -1103,7 +1103,7 @@ tk.Label(vb, text="✓", font=("Segoe UI", 20), fg=SUCCESS_GREEN,
 tk.Label(vb, text="SAFE", font=("Segoe UI", 9, "bold"),
          fg=SUCCESS_GREEN, bg=SUCCESS_DARK).pack()
 tk.Label(vb, text="BENIGN", font=("Segoe UI", 8),
-         fg="#3fb95088", bg=SUCCESS_DARK).pack(pady=(0, 8))
+         fg="#267a3a", bg=SUCCESS_DARK).pack(pady=(0, 8))
 vb_score_frame = tk.Frame(vb, bg=BENIGN_INNER)
 vb_score_frame.pack(fill="x", pady=(0, 4))
 tk.Label(vb_score_frame, text="THREAT SCORE", font=("Segoe UI", 7),

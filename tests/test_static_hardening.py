@@ -38,10 +38,13 @@ class StaticHardeningTests(unittest.TestCase):
         self.assertTrue(starts_thread)
 
     def test_main_uses_named_threshold_constant(self):
-        source = self.read_source(os.path.join("app", "main.py"))
+        main_source = self.read_source(os.path.join("app", "main.py"))
+        config_source = self.read_source(os.path.join("app", "detection_config.py"))
 
-        self.assertIn("APP_DETECTION_THRESHOLD = 0.25", source)
-        self.assertIn("is_ransomware = composite >= APP_DETECTION_THRESHOLD", source)
+        # Threshold defined in detection_config.py, imported into main.py
+        self.assertIn("APP_DETECTION_THRESHOLD = 0.25", config_source)
+        self.assertIn("from detection_config import", main_source)
+        self.assertIn("is_ransomware = composite >= APP_DETECTION_THRESHOLD", main_source)
 
     def test_runner_uses_vm_analysis_wording(self):
         source = self.read_source(os.path.join("app", "process_supervisor.py"))
