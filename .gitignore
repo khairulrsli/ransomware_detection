@@ -27,3 +27,17 @@ Desktop.ini
 # Local backups
 *.backup.docx
 *.backup.pptx
+
+# Coverage artifacts
+.coverage
+coverage.xml
+
+# Tool working directories
+.superpowers/
+.claude/
+
+# Old dataset backups
+data/raw_backup/
+
+# Superpowers working docs (specs kept, plans are working artifacts)
+docs/superpowers/plans/
