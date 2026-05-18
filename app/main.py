@@ -256,12 +256,9 @@ def compute_threat_score(prediction, early_result, df, events):
     # ── Signal 6: Shadow copy deletion — near-definitive (weight: 0.05) ──
     shadow_signal = min(1.0, shadow_deletes)
 
-    # ── Signal 7: Write+CPU combo pattern (weight: 0.05) ─────────────────
-    combo_signal = 0.0
-    if total_events > 0:
-        write_density = write_ops / max(total_events, 1)
-        loop_density = busy_loops / max(total_events, 1)
-        combo_signal = min(1.0, (write_density * 3 + loop_density * 5))
+    # ── Signal 7: Network connections (weight: 0.05) ──────────────────────
+    # 3+ outbound connections triggers full signal; single connection is benign
+    network_signal = min(1.0, network_ops / 3.0)
 
     # ── Signal 8: Suspicious child processes (weight: 0.05) ──────────────
     child_signal = min(1.0, suspicious_kids / 2.0)
@@ -274,7 +271,7 @@ def compute_threat_score(prediction, early_result, df, events):
         'entropy': 0.15,
         'canary':  0.10,
         'shadow':  0.05,
-        'combo':   0.05,
+        'network': 0.05,
         'child':   0.05,
     }
 
@@ -285,7 +282,7 @@ def compute_threat_score(prediction, early_result, df, events):
         WEIGHTS['entropy'] * entropy_signal +
         WEIGHTS['canary']  * canary_signal +
         WEIGHTS['shadow']  * shadow_signal +
-        WEIGHTS['combo']   * combo_signal +
+        WEIGHTS['network'] * network_signal +
         WEIGHTS['child']   * child_signal
     )
 
@@ -314,7 +311,7 @@ def compute_threat_score(prediction, early_result, df, events):
         'ml_signal': ml_signal, 'early_signal': early_signal,
         'rapid_signal': rapid_signal, 'entropy_signal': entropy_signal,
         'canary_signal': canary_signal, 'shadow_signal': shadow_signal,
-        'combo_signal': combo_signal, 'child_signal': child_signal,
+        'network_signal': network_signal, 'child_signal': child_signal,
         'streaming_risk': streaming_risk,
     }
 

@@ -194,7 +194,9 @@ class TestComputeThreatScore(unittest.TestCase):
         self.assertAlmostEqual(score, 0.0)
 
     def test_ml_only_signal(self):
-        score, _, signals, _ = main.compute_threat_score(1.0, self._early(), self._df([]), [])
+        # Provide 50+ raw events so ML signal is not suppressed
+        events = ["NtCreateFile"] * 50
+        score, _, signals, _ = main.compute_threat_score(1.0, self._early(), self._df([]), events)
         self.assertAlmostEqual(signals["ml_signal"], 1.0)
         self.assertAlmostEqual(score, 0.30, places=5)
 
@@ -262,7 +264,8 @@ class TestComputeThreatScore(unittest.TestCase):
 
     def test_threat_level_medium_from_ml_only(self):
         # ml=1.0 contributes weight 0.30 → score=0.30, which is MEDIUM (0.25–0.39)
-        score, level, _, _ = main.compute_threat_score(1.0, self._early(), self._df([]), [])
+        events = ["NtCreateFile"] * 50
+        score, level, _, _ = main.compute_threat_score(1.0, self._early(), self._df([]), events)
         self.assertAlmostEqual(score, 0.30, places=5)
         self.assertEqual(level, "MEDIUM")
 
@@ -291,10 +294,20 @@ class TestComputeThreatScore(unittest.TestCase):
         )
         self.assertEqual(metrics["shadow_deletes"], 1)
 
-    def test_combo_signal_with_writes_and_loops(self):
-        events = ["WriteFile"] * 40 + ["BusyLoop"] * 10
-        _, _, signals, _ = main.compute_threat_score(0.0, self._early(), self._df(events), [])
-        self.assertGreater(signals["combo_signal"], 0.0)
+    def test_network_signal_contributes_to_score(self):
+        df = self._df(["NetworkConnect", "NetworkConnect", "NetworkConnect"])
+        composite, _, signals, _ = main.compute_threat_score(0.0, self._early(), df, [])
+        self.assertGreater(composite, 0.0)
+        self.assertIn("network_signal", signals)
+        self.assertAlmostEqual(signals["network_signal"], 1.0)
+
+    def test_network_signal_zero_when_no_connections(self):
+        _, _, signals, _ = main.compute_threat_score(0.0, self._early(), self._df(["WriteFile"]), [])
+        self.assertAlmostEqual(signals["network_signal"], 0.0)
+
+    def test_network_signal_partial(self):
+        _, _, signals, _ = main.compute_threat_score(0.0, self._early(), self._df(["NetworkConnect"]), [])
+        self.assertAlmostEqual(signals["network_signal"], round(1 / 3.0, 5), places=4)
 
     def test_child_signal_scales_with_count(self):
         _, _, signals_1, _ = main.compute_threat_score(
@@ -308,7 +321,7 @@ class TestComputeThreatScore(unittest.TestCase):
     def test_all_signals_keys_present(self):
         _, _, signals, _ = main.compute_threat_score(0.0, self._early(), self._df([]), [])
         for key in ("ml_signal", "early_signal", "rapid_signal", "entropy_signal",
-                    "canary_signal", "shadow_signal", "combo_signal", "child_signal"):
+                    "canary_signal", "shadow_signal", "network_signal", "child_signal"):
             self.assertIn(key, signals)
 
     def test_rapid_writes_single_no_signal(self):
