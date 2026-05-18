@@ -444,7 +444,7 @@ def _update_metrics_panel(ml_score, write_ops, rapid_writes, busy_loops,
     if action_text:
         tk.Label(action_status_frame, text=f"✓  {action_text}",
                  font=("Segoe UI", 9, "bold"), fg=SUCCESS_GREEN,
-                 bg="#0f1f0f", padx=8, pady=4).pack(side="left")
+                 bg=ACTION_BG, padx=8, pady=4).pack(side="left")
         action_status_frame.pack(fill="x", pady=(6, 0))
     else:
         action_status_frame.pack_forget()
@@ -882,7 +882,11 @@ SUCCESS_GREEN   = "#3fb950"   # benign verdict, quarantine confirmed
 BTN_BLUE        = "#1f6feb"   # primary action button fill
 BTN_BLUE_BORDER = "#388bfd"
 DANGER_DARK     = "#1a0000"   # ransomware card background
-SUCCESS_DARK    = "#0f3d1f"   # benign card background
+RANSOM_INNER    = RANSOM_INNER   # inner accent in ransomware card
+SUCCESS_DARK    = SUCCESS_DARK   # benign card background
+BENIGN_INNER    = BENIGN_INNER   # inner accent in benign card
+ACTION_BG       = ACTION_BG   # action status row background
+ACTION_BORDER   = ACTION_BORDER   # action status row border
 
 # Aliases kept so existing references compile unchanged
 BG_DARK         = BG_DEEP
@@ -967,10 +971,10 @@ tk.Label(title_f, text="RANSOMWARE DETECTION SYSTEM",
 
 si = tk.Frame(hf, bg=BG_CARD)
 si.pack(side="right", pady=8)
-active_bg = tk.Frame(si, bg="#0f3d1f", padx=8, pady=2)
+active_bg = tk.Frame(si, bg=SUCCESS_DARK, padx=8, pady=2)
 active_bg.pack(side="right")
 tk.Label(active_bg, text="● ACTIVE", font=("Segoe UI", 9, "bold"),
-         fg=SUCCESS_GREEN, bg="#0f3d1f").pack()
+         fg=SUCCESS_GREEN, bg=SUCCESS_DARK).pack()
 
 # ── NOTEBOOK ───────────────────────────────────────────────────────────────────
 notebook = ttk.Notebook(root)
@@ -1062,21 +1066,21 @@ tk.Label(vr, text="RANSOMWARE", font=("Segoe UI", 9, "bold"),
          fg=DANGER_RED, bg=DANGER_DARK).pack()
 tk.Label(vr, text="DETECTED", font=("Segoe UI", 8),
          fg="#ff666688", bg=DANGER_DARK).pack(pady=(0, 8))
-vr_score_frame = tk.Frame(vr, bg="#2a0000")
+vr_score_frame = tk.Frame(vr, bg=RANSOM_INNER)
 vr_score_frame.pack(fill="x", pady=(0, 4))
 tk.Label(vr_score_frame, text="THREAT SCORE", font=("Segoe UI", 7),
-         fg=TEXT_MUTED, bg="#2a0000").pack(pady=(4, 0))
+         fg=TEXT_MUTED, bg=RANSOM_INNER).pack(pady=(4, 0))
 verdict_score_var = tk.StringVar(value="0.000")
 tk.Label(vr_score_frame, textvariable=verdict_score_var,
-         font=("Segoe UI", 16, "bold"), fg=DANGER_RED, bg="#2a0000").pack(pady=(0, 4))
-vr_cvss_frame = tk.Frame(vr, bg="#2a0000")
+         font=("Segoe UI", 16, "bold"), fg=DANGER_RED, bg=RANSOM_INNER).pack(pady=(0, 4))
+vr_cvss_frame = tk.Frame(vr, bg=RANSOM_INNER)
 vr_cvss_frame.pack(fill="x", pady=(0, 8))
 verdict_cvss_var = tk.StringVar(value="CVSS -")
 tk.Label(vr_cvss_frame, textvariable=verdict_cvss_var,
-         font=("Segoe UI", 9, "bold"), fg=WARN_ORANGE, bg="#2a0000").pack(pady=2)
+         font=("Segoe UI", 9, "bold"), fg=WARN_ORANGE, bg=RANSOM_INNER).pack(pady=2)
 verdict_severity_var = tk.StringVar(value="")
 tk.Label(vr_cvss_frame, textvariable=verdict_severity_var,
-         font=("Segoe UI", 8), fg=DANGER_RED, bg="#2a0000").pack(pady=(0, 4))
+         font=("Segoe UI", 8), fg=DANGER_RED, bg=RANSOM_INNER).pack(pady=(0, 4))
 quarantine_btn = tk.Button(vr, text="QUARANTINE", font=("Segoe UI", 8, "bold"),
                            bg=BG_CARD, fg=ACCENT_BLUE, padx=6, pady=4,
                            border=0, cursor="hand2",
@@ -1086,7 +1090,7 @@ delete_btn = tk.Button(vr, text="DELETE", font=("Segoe UI", 8, "bold"),
                        bg=DANGER_DARK, fg=DANGER_RED, padx=6, pady=4,
                        border=0, cursor="hand2", state="disabled",
                        highlightbackground=DANGER_RED, highlightthickness=1,
-                       activebackground="#2a0000", activeforeground=DANGER_RED)
+                       activebackground=RANSOM_INNER, activeforeground=DANGER_RED)
 delete_btn.pack(fill="x")
 
 # Benign card (hidden until benign result)
@@ -1100,18 +1104,18 @@ tk.Label(vb, text="SAFE", font=("Segoe UI", 9, "bold"),
          fg=SUCCESS_GREEN, bg=SUCCESS_DARK).pack()
 tk.Label(vb, text="BENIGN", font=("Segoe UI", 8),
          fg="#3fb95088", bg=SUCCESS_DARK).pack(pady=(0, 8))
-vb_score_frame = tk.Frame(vb, bg="#0a2a12")
+vb_score_frame = tk.Frame(vb, bg=BENIGN_INNER)
 vb_score_frame.pack(fill="x", pady=(0, 4))
 tk.Label(vb_score_frame, text="THREAT SCORE", font=("Segoe UI", 7),
-         fg=TEXT_MUTED, bg="#0a2a12").pack(pady=(4, 0))
+         fg=TEXT_MUTED, bg=BENIGN_INNER).pack(pady=(4, 0))
 benign_score_var = tk.StringVar(value="0.000")
 tk.Label(vb_score_frame, textvariable=benign_score_var,
-         font=("Segoe UI", 16, "bold"), fg=SUCCESS_GREEN, bg="#0a2a12").pack(pady=(0, 4))
-vb_cvss_frame = tk.Frame(vb, bg="#0a2a12")
+         font=("Segoe UI", 16, "bold"), fg=SUCCESS_GREEN, bg=BENIGN_INNER).pack(pady=(0, 4))
+vb_cvss_frame = tk.Frame(vb, bg=BENIGN_INNER)
 vb_cvss_frame.pack(fill="x")
 benign_cvss_var = tk.StringVar(value="CVSS -")
 tk.Label(vb_cvss_frame, textvariable=benign_cvss_var,
-         font=("Segoe UI", 9, "bold"), fg=SUCCESS_GREEN, bg="#0a2a12").pack(pady=4)
+         font=("Segoe UI", 9, "bold"), fg=SUCCESS_GREEN, bg=BENIGN_INNER).pack(pady=4)
 
 # Metrics panel ────────────────────────────────────────────────────────────────
 metrics_outer = tk.Frame(result_row, bg=BG_CARD,
@@ -1171,8 +1175,8 @@ tk.Label(ioc_badges_frame, text="No scan yet", font=("Segoe UI", 8),
          fg=TEXT_MUTED, bg=BG_CARD).pack(side="left")
 
 # Action status row (shown after ransomware result)
-action_status_frame = tk.Frame(mp, bg="#0f1f0f",
-                               highlightbackground="#238636", highlightthickness=1)
+action_status_frame = tk.Frame(mp, bg=ACTION_BG,
+                               highlightbackground=ACTION_BORDER, highlightthickness=1)
 action_status_var = tk.StringVar(value="")
 
 # Dummy metrics_text widget (kept for backward compat with any stray references)
