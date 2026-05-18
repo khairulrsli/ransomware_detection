@@ -624,10 +624,8 @@ def start_analysis():
 
 
 def add_history_entry(filename, verdict, confidence):
-    ts = datetime.now().strftime("%H:%M:%S")
     tag = "ransom" if "RANSOM" in verdict.upper() else "benign"
-    dot = "●"
-    entry = f"  {dot} {filename[:28]}  [{verdict}]  {confidence}"
+    entry = f"  ● {filename[:28]}  [{verdict}]  {confidence}"
     analysis_history.insert(0, (entry, tag))
     if len(analysis_history) > 8:
         analysis_history.pop()
