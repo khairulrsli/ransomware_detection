@@ -625,15 +625,18 @@ def start_analysis():
 
 def add_history_entry(filename, verdict, confidence):
     ts = datetime.now().strftime("%H:%M:%S")
-    entry = f"{ts} | {filename[:28]:28} | {verdict:15} | {confidence}"
-    analysis_history.insert(0, entry)
-    if len(analysis_history) > 10:
+    tag = "ransom" if "RANSOM" in verdict.upper() else "benign"
+    dot = "●"
+    entry = f"  {dot} {filename[:28]}  [{verdict}]  {confidence}"
+    analysis_history.insert(0, (entry, tag))
+    if len(analysis_history) > 8:
         analysis_history.pop()
     history_text.config(state="normal")
     history_text.delete("1.0", "end")
-    for item in analysis_history:
-        history_text.insert("end", item + "\n")
+    for item, t in analysis_history:
+        history_text.insert("end", item + "   ", t)
     history_text.config(state="disabled")
+    history_count_var.set(f"{len(analysis_history)} scans this session")
 
 
 def refresh_statistics():
@@ -697,6 +700,7 @@ def clear_history():
     history_text.delete("1.0", "end")
     history_text.config(state="disabled")
     analysis_history.clear()
+    history_count_var.set("0 scans this session")
     messagebox.showinfo("Cleared", "All history and quarantine records deleted.")
 
 
@@ -865,31 +869,27 @@ style.configure("Custom.Horizontal.TProgressbar",
                 borderwidth=0, thickness=8)
 
 # ── HEADER ─────────────────────────────────────────────────────────────────────
-header = tk.Frame(root, bg=HEADER_BG, height=72)
+header = tk.Frame(root, bg=BG_CARD, height=52)
 header.pack(fill="x")
 header.pack_propagate(False)
-tk.Frame(root, bg=PRIMARY_COLOR, height=3).pack(fill="x")  # accent stripe
+tk.Frame(root, bg=BORDER_COLOR, height=1).pack(fill="x")
 
-hf = tk.Frame(header, bg=HEADER_BG)
-hf.pack(fill="both", expand=True, padx=28)
+hf = tk.Frame(header, bg=BG_CARD)
+hf.pack(fill="both", expand=True, padx=20)
 
-title_f = tk.Frame(hf, bg=HEADER_BG)
-title_f.pack(side="left", fill="y", pady=10)
-tk.Label(title_f, text="*", font=("Segoe UI", 22), fg="#818cf8",
-         bg=HEADER_BG).pack(side="left", padx=(0, 12))
-ti = tk.Frame(title_f, bg=HEADER_BG)
-ti.pack(side="left")
-tk.Label(ti, text="RANSOMWARE DETECTION", font=("Segoe UI", 15, "bold"),
-         fg="#f1f5f9", bg=HEADER_BG).pack(anchor="w")
-tk.Label(ti, text="Advanced Behavioral Analysis Engine", font=("Segoe UI", 9),
-         fg="#94a3b8", bg=HEADER_BG).pack(anchor="w")
+title_f = tk.Frame(hf, bg=BG_CARD)
+title_f.pack(side="left", fill="y", pady=8)
+tk.Label(title_f, text="●", font=("Segoe UI", 10), fg=DANGER_RED,
+         bg=BG_CARD).pack(side="left", padx=(0, 8))
+tk.Label(title_f, text="RANSOMWARE DETECTION SYSTEM",
+         font=("Segoe UI", 11, "bold"), fg=ACCENT_BLUE, bg=BG_CARD).pack(side="left")
 
-si = tk.Frame(hf, bg=HEADER_BG)
-si.pack(side="right", pady=10)
-tk.Label(si, text="*", font=("Segoe UI", 8), fg=SUCCESS_COLOR,
-         bg=HEADER_BG).pack(side="left", padx=(0, 5))
-tk.Label(si, text="Model Active", font=SMALL_FONT, fg="#94a3b8",
-         bg=HEADER_BG).pack(side="left")
+si = tk.Frame(hf, bg=BG_CARD)
+si.pack(side="right", pady=8)
+active_bg = tk.Frame(si, bg="#0f3d1f", padx=8, pady=2)
+active_bg.pack(side="right")
+tk.Label(active_bg, text="● ACTIVE", font=("Segoe UI", 9, "bold"),
+         fg=SUCCESS_GREEN, bg="#0f3d1f").pack()
 
 # ── NOTEBOOK ───────────────────────────────────────────────────────────────────
 notebook = ttk.Notebook(root)
@@ -1036,19 +1036,23 @@ quarantine_view = tk.Text(q_card, font=MONO_FONT, height=20, wrap="word",
 quarantine_view.pack(fill="both", expand=True, padx=16, pady=(8, 16))
 
 # ── FOOTER: SESSION HISTORY ───────────────────────────────────────────────────
-footer = tk.Frame(root, bg=HEADER_BG)
+tk.Frame(root, bg=BORDER_COLOR, height=1).pack(fill="x", side="bottom")
+footer = tk.Frame(root, bg=BG_CARD)
 footer.pack(fill="x", side="bottom")
-tk.Frame(root, bg=PRIMARY_COLOR, height=2).pack(fill="x", side="bottom")  # accent stripe
-fh = tk.Frame(footer, bg=HEADER_BG)
-fh.pack(fill="x", padx=20, pady=(10, 0))
-tk.Label(fh, text="SESSION HISTORY", font=("Segoe UI", 10, "bold"),
-         fg="#94a3b8", bg=HEADER_BG).pack(anchor="w")
-tk.Frame(fh, bg="#334155", height=1).pack(fill="x", pady=(6, 0))
-history_text = tk.Text(footer, font=MONO_FONT, height=3, width=110,
-                        state="disabled", wrap="word", bg="#0f172a", fg="#cbd5e1",
-                        relief="flat", padx=10, pady=8, highlightbackground="#334155",
-                        highlightthickness=1)
-history_text.pack(fill="both", expand=True, padx=20, pady=(8, 12))
+fh = tk.Frame(footer, bg=BG_CARD)
+fh.pack(fill="x", padx=20, pady=(8, 0))
+tk.Label(fh, text="SCAN HISTORY", font=("Segoe UI", 8, "bold"),
+         fg=TEXT_MUTED, bg=BG_CARD).pack(side="left")
+history_count_var = tk.StringVar(value="0 scans this session")
+tk.Label(fh, textvariable=history_count_var, font=("Segoe UI", 8),
+         fg=TEXT_MUTED, bg=BG_CARD).pack(side="right")
+history_text = tk.Text(footer, font=MONO_FONT, height=2, width=110,
+                       state="disabled", wrap="none", bg=BG_CARD, fg=TEXT_PRIMARY,
+                       relief="flat", padx=10, pady=6,
+                       highlightbackground=BORDER_COLOR, highlightthickness=0)
+history_text.pack(fill="x", expand=False, padx=20, pady=(4, 10))
+history_text.tag_configure("ransom", foreground=DANGER_RED)
+history_text.tag_configure("benign", foreground=SUCCESS_GREEN)
 
 refresh_statistics()
 show_quarantine()
