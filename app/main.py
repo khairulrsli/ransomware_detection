@@ -484,8 +484,9 @@ def analyze_in_thread(file_path):
 
         df = pd.read_csv(LOG_FILE)
         if len(df) == 0 or "event" not in df.columns:
+            _cvss_score, _cvss_label = cvss_severity(0.0)
             run_on_ui(_show_benign, "No activity detected", "BENIGN", "N/A", wait=True)
-            run_on_ui(_show_benign_card, 0.0, 0.0, "None", wait=True)
+            run_on_ui(_show_benign_card, 0.0, _cvss_score, _cvss_label, wait=True)
             run_on_ui(_update_metrics_panel, 0.0, 0, 0, 0, 0, [], None, wait=True)
             return
 
