@@ -593,7 +593,7 @@ def analyze_in_thread(file_path):
                           f"{'Quarantined' if quarantined else 'Not quarantined'}")
             run_on_ui(_show_ransomware_card, composite, cvss_score, cvss_label, wait=True)
             run_on_ui(_update_metrics_panel,
-                      prediction, write_ops, rapid_writes, busy_loops, network_ops,
+                      signals['ml_signal'], write_ops, rapid_writes, busy_loops, network_ops,
                       ioc_badge_items, action_str, wait=True)
 
             if quarantined and quarantine_path:
@@ -661,7 +661,7 @@ def analyze_in_thread(file_path):
                     ioc_badge_items.append((name, count, sev))
             run_on_ui(_show_benign_card, composite, cvss_score, cvss_label, wait=True)
             run_on_ui(_update_metrics_panel,
-                      prediction, write_ops, rapid_writes, busy_loops, network_ops,
+                      signals['ml_signal'], write_ops, rapid_writes, busy_loops, network_ops,
                       ioc_badge_items, None, wait=True)
             run_on_ui(_show_benign, "Normal application behavior", "BENIGN", f"{composite*100:.1f}%", wait=True)
             db.add_analysis(file_name, "BENIGN FILE", composite, prediction,
