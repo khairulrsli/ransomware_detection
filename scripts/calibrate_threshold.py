@@ -18,9 +18,11 @@ Writes:
     reports/threshold_calibration.csv
 """
 
-import os
-import sys
 import csv
+import os
+import pickle
+import sys
+
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -32,15 +34,11 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(ROOT, "app"))
 sys.path.insert(0, os.path.join(ROOT, "model"))
 
-import tensorflow as tf
 from tensorflow.keras.models import load_model
 
-from train_model import load_training_data, encode_sequence_with_tokenizer, MAX_LEN
+from detection_config import ML_ALERT_THRESHOLD, WEIGHTS
 from early_detection import predict_early_windows, DEFAULT_WINDOWS
-from preprocessing import compute_event_statistics
-import pickle
-
-ML_ALERT_THRESHOLD = 0.5
+from train_model import load_training_data, encode_sequence_with_tokenizer
 
 
 def synthesize_runtime_dataframe(events):
@@ -92,16 +90,9 @@ def runtime_composite_score(model, events, tokenizer):
     canary_signal  = min(1.0, canary_hits)
     shadow_signal  = min(1.0, shadow_deletes)
 
-    combo_signal = 0.0
-    if total_events > 0:
-        write_density = write_ops / max(total_events, 1)
-        loop_density  = busy_loops / max(total_events, 1)
-        combo_signal = min(1.0, (write_density * 3 + loop_density * 5))
-
+    # network_signal is 0 in offline evaluation — training data has no NetworkConnect events
+    network_signal = 0.0
     child_signal = min(1.0, suspicious_kids / 2.0)
-
-    WEIGHTS = {'ml':0.30, 'early':0.15, 'rapid':0.15, 'entropy':0.15,
-               'canary':0.10, 'shadow':0.05, 'combo':0.05, 'child':0.05}
 
     composite = (
         WEIGHTS['ml']      * ml_signal +
@@ -110,7 +101,7 @@ def runtime_composite_score(model, events, tokenizer):
         WEIGHTS['entropy'] * entropy_signal +
         WEIGHTS['canary']  * canary_signal +
         WEIGHTS['shadow']  * shadow_signal +
-        WEIGHTS['combo']   * combo_signal +
+        WEIGHTS['network'] * network_signal +
         WEIGHTS['child']   * child_signal
     )
 
@@ -187,7 +178,7 @@ def main():
     out_csv = os.path.join(ROOT, "reports", "threshold_calibration.csv")
     os.makedirs(os.path.dirname(out_txt), exist_ok=True)
 
-    with open(out_csv, "w", newline="") as f:
+    with open(out_csv, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=["threshold","precision","recall","f1","tn","fp","fn","tp"])
         w.writeheader()
         for row in rows:
@@ -219,7 +210,7 @@ def main():
     lines.append("If false alarms are costly (consumer deployment), pick the highest")
     lines.append("threshold with recall>=80% that keeps precision>=95%.")
 
-    with open(out_txt, "w") as f:
+    with open(out_txt, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
 
     print("\n" + "\n".join(lines))

@@ -83,7 +83,7 @@ def run_in_sandbox(exe_path):
                     if handle:
                         kernel32.ResumeThread(handle)
                         kernel32.CloseHandle(handle)
-                print(f"[+] Process RESUMED — monitoring active")
+                print("[+] Process RESUMED — monitoring active")
             except Exception as e:
                 print(f"[!] Could not resume process, killing it: {e}")
                 try:
@@ -161,7 +161,7 @@ def _force_kill(process):
         taskkill = shutil.which("taskkill") or r"C:\Windows\System32\taskkill.exe"
         subprocess.run(
             [taskkill, "/F", "/T", "/PID", str(pid)],
-            capture_output=True, timeout=5
+            capture_output=True, timeout=5, check=False
         )
     except Exception:
         pass

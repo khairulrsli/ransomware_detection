@@ -1,30 +1,31 @@
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-import pandas as pd
-from tensorflow.keras.models import load_model
-import threading
+import fnmatch
 import os
-import psutil
+import re
 import shutil
 import stat
-import time
 import subprocess
-from process_supervisor import run_in_sandbox
-import behavior_logger
-from preprocessing import read_events_from_log
-from early_detection import predict_early_windows, DEFAULT_WINDOWS
+import threading
+import time
 from datetime import datetime
+
+import pandas as pd
+import psutil
+from tensorflow.keras.models import load_model
+import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
+
+from detection_config import APP_DETECTION_THRESHOLD, ML_ALERT_THRESHOLD, WEIGHTS
+import behavior_logger
+from early_detection import predict_early_windows, DEFAULT_WINDOWS
+from preprocessing import read_events_from_log
+from process_supervisor import run_in_sandbox
 from threat_database import db
-import re
-import fnmatch
 
 APP_DIR    = os.path.dirname(os.path.abspath(__file__))
 PARENT_DIR = os.path.dirname(APP_DIR)
 MODEL_DIR  = os.path.join(PARENT_DIR, "model")
 MODEL_PATH = os.path.join(MODEL_DIR, "trained_model.h5")
 LOG_FILE   = os.path.join(PARENT_DIR, "logs", "api_logs.csv")
-APP_DETECTION_THRESHOLD = 0.25  # Calibrated: best precision/FP tradeoff on real-only test set
-ML_ALERT_THRESHOLD = 0.5
 
 
 def cvss_severity(composite: float):
@@ -164,7 +165,7 @@ def kill_process_tree(file_path):
             taskkill = shutil.which("taskkill") or r"C:\Windows\System32\taskkill.exe"
             subprocess.run(
                 [taskkill, "/F", "/T", "/PID", str(all_procs[0].pid)],
-                capture_output=True, timeout=3
+                capture_output=True, timeout=3, check=False
             )
         except Exception:
             pass
@@ -243,8 +244,9 @@ def run_on_ui(callback, *args, wait=False, **kwargs):
         return None
 
     done.wait()
-    if result["error"] is not None:
-        raise result["error"]
+    exc = result["error"]
+    if exc is not None:
+        raise exc
     return result["value"]
 
 
@@ -316,18 +318,6 @@ def compute_threat_score(prediction, early_result, df, events):
     # ── Signal 8: Suspicious child processes (weight: 0.05) ──────────────
     child_signal = min(1.0, suspicious_kids / 2.0)
 
-    # ── Weighted fusion ──────────────────────────────────────────────────
-    WEIGHTS = {
-        'ml':      0.30,
-        'early':   0.15,
-        'rapid':   0.15,
-        'entropy': 0.15,
-        'canary':  0.10,
-        'shadow':  0.05,
-        'network': 0.05,
-        'child':   0.05,
-    }
-
     composite = (
         WEIGHTS['ml']      * ml_signal +
         WEIGHTS['early']   * early_signal +
@@ -384,7 +374,7 @@ def analyze_in_thread(file_path):
         file_size = os.path.getsize(file_path) / 1024
 
         run_on_ui(current_file.set, f"{file_name}\n({file_size:.1f} KB)", wait=True)
-        run_on_ui(set_progress, "Executing in VM analysis runner...", 10, "10% - Running VM runner", wait=True)
+        run_on_ui(set_progress, "Executing behavioral sandbox analysis...", 10, "10% - Running analysis", wait=True)
         run_on_ui(result_var.set, "", wait=True)
         run_on_ui(result_label.config, bg="#f0f1f4", fg="#6b7280", wait=True)
         run_on_ui(delete_btn.pack_forget, wait=True)
@@ -687,7 +677,7 @@ def export_report():
         defaultextension=".csv", filetypes=[("CSV Files", "*.csv")]
     )
     if save_path:
-        with open(save_path, 'w') as f:
+        with open(save_path, 'w', encoding='utf-8') as f:
             f.write(csv_content)
         messagebox.showinfo("Exported", f"Report saved to:\n{save_path}")
 
