@@ -255,7 +255,7 @@ def log_behavior(pid=None, duration=35):
 
                     # CPU activity
                     cpu = process.cpu_percent(interval=0.1)
-                    if cpu > 30:
+                    if cpu > 70:
                         append_log_entry(time.time(), pid, "BusyLoop")
                         total_busy_loops += 1
                         iteration_risk += RISK_WEIGHTS['busy_loop']
@@ -351,7 +351,7 @@ def log_behavior(pid=None, duration=35):
                     pass
 
             # Rapid write detection (KEY RANSOMWARE INDICATOR)
-            if rapid_write_counter >= 3:
+            if rapid_write_counter >= 10:
                 append_log_entry(time.time(), pid or 0, "RapidFileWrite")
                 iteration_risk += RISK_WEIGHTS['rapid_write']
                 rapid_write_counter = 0  # Reset counter

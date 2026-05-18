@@ -228,7 +228,9 @@ def compute_threat_score(prediction, early_result, df, events):
     total_events    = len(df)
 
     # ── Signal 1: ML prediction score (weight: 0.30) ─────────────────────
-    ml_signal = prediction
+    # Suppress ML signal when too few raw API events — LSTM is unreliable
+    # on short sequences (early detection weakness; needs 150+ events).
+    ml_signal = prediction if len(events) >= 50 else 0.0
 
     # ── Signal 2: Early detection alert (weight: 0.15) ───────────────────
     early_signal = 0.0
@@ -366,8 +368,17 @@ def analyze_in_thread(file_path):
             return
 
         # LSTM prediction with enhanced early detection
+        # Strip derived/heuristic events — they aren't in the training vocabulary
+        # and map to <OOV>, corrupting the LSTM score. Heuristics are already
+        # counted separately in the composite score signals below.
+        DERIVED_EVENTS = {
+            "RapidFileWrite", "BusyLoop", "HighEntropyFile", "CanaryViolation",
+            "ShadowCopyDelete", "SuspiciousChild", "EarlyTermination",
+            "TerminateProcess", "NetworkConnect",
+        }
         events = read_events_from_log(LOG_FILE)
-        early_result = predict_early_windows(model, events, windows=DEFAULT_WINDOWS, threshold=ML_ALERT_THRESHOLD)
+        raw_events = [e for e in events if e not in DERIVED_EVENTS]
+        early_result = predict_early_windows(model, raw_events, windows=DEFAULT_WINDOWS, threshold=ML_ALERT_THRESHOLD)
         prediction   = early_result["final_score"]
 
         run_on_ui(progress_var.set, 75, wait=True)
@@ -375,7 +386,7 @@ def analyze_in_thread(file_path):
 
         # ── WEIGHTED MULTI-SIGNAL FUSION ─────────────────────────────────
         composite, threat_level, signals, metrics = compute_threat_score(
-            prediction, early_result, df, events
+            prediction, early_result, df, raw_events
         )
 
         write_ops    = metrics['write_ops']
