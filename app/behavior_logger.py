@@ -1,10 +1,14 @@
-import psutil
-import time
 import csv
-import os
-import tempfile
-import math
 import hashlib
+import math
+import os
+import subprocess
+import tempfile
+import threading
+import time
+
+import pandas as pd
+import psutil
 
 # Use absolute path so log location is consistent regardless of working directory
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -72,7 +76,7 @@ def _deploy_canary_files(watch_dirs):
                 if not os.path.exists(canary_path):
                     # Create a small canary file with known content
                     content = f"CANARY_{hashlib.md5(watch_dir.encode(), usedforsecurity=False).hexdigest()}"
-                    with open(canary_path, 'w') as f:
+                    with open(canary_path, 'w', encoding='utf-8') as f:
                         f.write(content)
                     created_paths.append(canary_path)
                     # Set hidden attribute on Windows
@@ -165,6 +169,34 @@ def _detect_suspicious_child_processes(pid):
     return suspicious
 
 
+def _kill_process_now(pid):
+    """Kill process tree in a daemon thread so callers never block."""
+    def _do_kill():
+        try:
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(pid)],
+                capture_output=True, timeout=5, check=False
+            )
+            print(f"[!] taskkill used on PID: {pid}")
+        except Exception:
+            pass
+        try:
+            proc = psutil.Process(pid)
+            for p in [proc] + proc.children(recursive=True):
+                try:
+                    p.kill()
+                    print(f"[!] Killed PID: {p.pid}")
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        print(f"[+] Process tree neutralised for PID: {pid}")
+
+    t = threading.Thread(target=_do_kill, daemon=True)
+    t.start()
+    t.join(timeout=8)
+
+
 def log_behavior(pid=None, duration=35):
     global early_termination_triggered, streaming_risk_score, streaming_risk_details
     early_termination_triggered = False
@@ -200,7 +232,7 @@ def log_behavior(pid=None, duration=35):
     canaries, created_canaries = _deploy_canary_files(WATCH_DIRS)
 
     # Clear and initialize the log file
-    with open(LOG_FILE, "w", newline="") as f:
+    with open(LOG_FILE, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(["timestamp", "pid", "event"])
         f.flush()
@@ -209,7 +241,7 @@ def log_behavior(pid=None, duration=35):
     # Helper function to safely append to CSV
     def append_log_entry(timestamp, process_id, event_type):
         try:
-            with open(LOG_FILE, "a", newline="") as f:
+            with open(LOG_FILE, "a", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
                 writer.writerow([timestamp, process_id, event_type])
                 f.flush()
@@ -218,14 +250,15 @@ def log_behavior(pid=None, duration=35):
             print(f"[!] Error writing log: {e}")
 
     start_time = time.time()
-    rapid_write_counter = 0
-    total_write_ops     = 0
-    total_busy_loops    = 0
-    total_network_ops   = 0
-    high_entropy_files  = 0
-    canary_violations   = 0
-    suspicious_children = set()
-    poll_interval       = 0.5   # Adaptive: speeds up when suspicious
+    rapid_write_counter   = 0
+    rapid_file_write_events = 0
+    total_write_ops       = 0
+    total_busy_loops      = 0
+    total_network_ops     = 0
+    high_entropy_files    = 0
+    canary_violations     = 0
+    suspicious_children   = set()
+    poll_interval         = 0.5   # Adaptive: speeds up when suspicious
 
     # ── Cumulative risk scoring weights ───────────────────────────────────
     RISK_WEIGHTS = {
@@ -354,12 +387,13 @@ def log_behavior(pid=None, duration=35):
             if rapid_write_counter >= 10:
                 append_log_entry(time.time(), pid or 0, "RapidFileWrite")
                 iteration_risk += RISK_WEIGHTS['rapid_write']
-                rapid_write_counter = 0  # Reset counter
+                rapid_write_counter = 0
+                rapid_file_write_events += 1
 
             # ── UPDATE STREAMING RISK SCORE ───────────────────────────────
             # Exponential moving average: recent signals weighted more heavily
             alpha = 0.3   # Smoothing factor
-            streaming_risk_score = min(1.0, streaming_risk_score * (1 - alpha) + iteration_risk * alpha + iteration_risk)
+            streaming_risk_score = min(1.0, streaming_risk_score * (1 - alpha) + iteration_risk * alpha)
             streaming_risk_details = {
                 'total_write_ops': total_write_ops,
                 'total_busy_loops': total_busy_loops,
@@ -381,80 +415,38 @@ def log_behavior(pid=None, duration=35):
                 poll_interval = 0.5    # 500ms — normal monitoring
 
             # ── EARLY TERMINATION TRIGGERS ─────────────────────────────────
-            import pandas as pd
-
-            def kill_process_now(pid):
-                """Kill process tree — runs in daemon thread to avoid blocking logger."""
-                import subprocess, threading
-
-                def _do_kill():
-                    # taskkill /F /T first — avoids suspend() deadlock on ransomware
-                    try:
-                        subprocess.run(
-                            ["taskkill", "/F", "/T", "/PID", str(pid)],
-                            capture_output=True, timeout=5
-                        )
-                        print(f"[!] taskkill used on PID: {pid}")
-                    except Exception:
-                        pass
-
-                    # psutil cleanup for stragglers
-                    try:
-                        proc = psutil.Process(pid)
-                        for p in [proc] + proc.children(recursive=True):
-                            try:
-                                p.kill()
-                                print(f"[!] Killed PID: {p.pid}")
-                            except Exception:
-                                pass
-                    except Exception:
-                        pass
-
-                    print(f"[+] Process tree neutralised for PID: {pid}")
-
-                t = threading.Thread(target=_do_kill, daemon=True)
-                t.start()
-                t.join(timeout=8)
-
-            # TIER 1: Canary violation or shadow copy deletion → IMMEDIATE KILL
+            # TIER 1: Canary violation → IMMEDIATE KILL
             if canary_violations >= 1:
                 print(f"[!] TIER-1 TERMINATION: Canary violation at {elapsed:.1f}s — killing process!")
                 if pid is not None:
-                    kill_process_now(pid)
+                    _kill_process_now(pid)
                 append_log_entry(time.time(), pid or 0, "EarlyTermination")
                 early_termination_triggered = True
                 break
 
-            # TIER 2: RapidFileWrite with high entropy files → KILL
-            try:
-                df = pd.read_csv(LOG_FILE)
-                rapid_count = df[df["event"] == "RapidFileWrite"].shape[0]
-                high_entropy_count = df[df["event"] == "HighEntropyFile"].shape[0]
+            # TIER 2: RapidFileWrite + high entropy → KILL
+            if rapid_file_write_events >= 1 and high_entropy_files >= 1:
+                print(f"[!] TIER-2 TERMINATION: RapidWrite+HighEntropy at {elapsed:.1f}s — killing process!")
+                if pid is not None:
+                    _kill_process_now(pid)
+                append_log_entry(time.time(), pid or 0, "EarlyTermination")
+                early_termination_triggered = True
+                break
 
-                if rapid_count >= 1 and high_entropy_count >= 1:
-                    print(f"[!] TIER-2 TERMINATION: RapidWrite+HighEntropy at {elapsed:.1f}s — killing process!")
-                    if pid is not None:
-                        kill_process_now(pid)
-                    append_log_entry(time.time(), pid or 0, "EarlyTermination")
-                    early_termination_triggered = True
-                    break
-
-                # TIER 3: RapidFileWrite alone (original trigger, kept as fallback)
-                if rapid_count >= 2:
-                    print(f"[!] TIER-3 TERMINATION: Multiple RapidFileWrite at {elapsed:.1f}s — killing process!")
-                    if pid is not None:
-                        kill_process_now(pid)
-                    append_log_entry(time.time(), pid or 0, "EarlyTermination")
-                    early_termination_triggered = True
-                    break
-            except Exception:
-                pass
+            # TIER 3: RapidFileWrite alone (fallback)
+            if rapid_file_write_events >= 2:
+                print(f"[!] TIER-3 TERMINATION: Multiple RapidFileWrite at {elapsed:.1f}s — killing process!")
+                if pid is not None:
+                    _kill_process_now(pid)
+                append_log_entry(time.time(), pid or 0, "EarlyTermination")
+                early_termination_triggered = True
+                break
 
             # TIER 4: High write + busy loops within first 10 seconds
             if elapsed <= 10 and total_write_ops >= 3 and total_busy_loops >= 2:
                 print(f"[!] TIER-4 TERMINATION: High write+CPU at {elapsed:.1f}s — killing process!")
                 if pid is not None:
-                    kill_process_now(pid)
+                    _kill_process_now(pid)
                 append_log_entry(time.time(), pid or 0, "EarlyTermination")
                 early_termination_triggered = True
                 break
@@ -463,7 +455,7 @@ def log_behavior(pid=None, duration=35):
             if streaming_risk_score >= 0.8:
                 print(f"[!] TIER-5 TERMINATION: Risk score {streaming_risk_score:.3f} at {elapsed:.1f}s — killing process!")
                 if pid is not None:
-                    kill_process_now(pid)
+                    _kill_process_now(pid)
                 append_log_entry(time.time(), pid or 0, "EarlyTermination")
                 early_termination_triggered = True
                 break

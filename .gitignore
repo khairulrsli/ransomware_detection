@@ -39,5 +39,4 @@ coverage.xml
 # Old dataset backups
 data/raw_backup/
 
-# Superpowers working docs (specs kept, plans are working artifacts)
-docs/superpowers/plans/
+# Superpowers working docs

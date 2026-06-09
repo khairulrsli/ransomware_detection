@@ -1,30 +1,31 @@
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-import pandas as pd
-from tensorflow.keras.models import load_model
-import threading
+import fnmatch
 import os
-import psutil
+import re
 import shutil
 import stat
-import time
 import subprocess
-from process_supervisor import run_in_sandbox
-import behavior_logger
-from preprocessing import read_events_from_log
-from early_detection import predict_early_windows, DEFAULT_WINDOWS
+import threading
+import time
 from datetime import datetime
+
+import pandas as pd
+import psutil
+from tensorflow.keras.models import load_model
+import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
+
+from detection_config import APP_DETECTION_THRESHOLD, ML_ALERT_THRESHOLD, WEIGHTS
+import behavior_logger
+from early_detection import predict_early_windows, DEFAULT_WINDOWS
+from preprocessing import read_events_from_log
+from process_supervisor import run_in_sandbox
 from threat_database import db
-import re
-import fnmatch
 
 APP_DIR    = os.path.dirname(os.path.abspath(__file__))
 PARENT_DIR = os.path.dirname(APP_DIR)
 MODEL_DIR  = os.path.join(PARENT_DIR, "model")
 MODEL_PATH = os.path.join(MODEL_DIR, "trained_model.h5")
 LOG_FILE   = os.path.join(PARENT_DIR, "logs", "api_logs.csv")
-APP_DETECTION_THRESHOLD = 0.25  # Calibrated: best precision/FP tradeoff on real-only test set
-ML_ALERT_THRESHOLD = 0.5
 
 
 def cvss_severity(composite: float):
@@ -164,7 +165,7 @@ def kill_process_tree(file_path):
             taskkill = shutil.which("taskkill") or r"C:\Windows\System32\taskkill.exe"
             subprocess.run(
                 [taskkill, "/F", "/T", "/PID", str(all_procs[0].pid)],
-                capture_output=True, timeout=3
+                capture_output=True, timeout=3, check=False
             )
         except Exception:
             pass
@@ -243,8 +244,9 @@ def run_on_ui(callback, *args, wait=False, **kwargs):
         return None
 
     done.wait()
-    if result["error"] is not None:
-        raise result["error"]
+    exc = result["error"]
+    if exc is not None:
+        raise exc
     return result["value"]
 
 
@@ -259,6 +261,9 @@ def set_progress(status, progress, progress_text):
     status_var.set(status)
     progress_var.set(progress)
     progress_text_var.set(progress_text)
+    prog_info_var.set(progress_text)
+    frac = max(0.0, min(1.0, progress / 100.0))
+    prog_fill.place(relwidth=frac)
 
 
 def compute_threat_score(prediction, early_result, df, events):
@@ -316,18 +321,6 @@ def compute_threat_score(prediction, early_result, df, events):
     # ── Signal 8: Suspicious child processes (weight: 0.05) ──────────────
     child_signal = min(1.0, suspicious_kids / 2.0)
 
-    # ── Weighted fusion ──────────────────────────────────────────────────
-    WEIGHTS = {
-        'ml':      0.30,
-        'early':   0.15,
-        'rapid':   0.15,
-        'entropy': 0.15,
-        'canary':  0.10,
-        'shadow':  0.05,
-        'network': 0.05,
-        'child':   0.05,
-    }
-
     composite = (
         WEIGHTS['ml']      * ml_signal +
         WEIGHTS['early']   * early_signal +
@@ -378,16 +371,97 @@ def compute_threat_score(prediction, early_result, df, events):
     return composite, threat_level, signals, metrics
 
 
+def _hide_verdict_cards():
+    verdict_idle.pack_forget()
+    verdict_ransom.pack_forget()
+    verdict_benign.pack_forget()
+
+
+def _show_ransomware_card(composite, cvss_score, cvss_label):
+    _hide_verdict_cards()
+    verdict_score_var.set(f"{composite:.3f}")
+    verdict_cvss_var.set(f"CVSS {cvss_score}")
+    verdict_severity_var.set(cvss_label.upper())
+    verdict_ransom.pack(fill="both", expand=True)
+
+
+def _show_benign_card(composite, cvss_score, cvss_label):
+    _hide_verdict_cards()
+    benign_score_var.set(f"{composite:.3f}")
+    benign_cvss_var.set(f"CVSS {cvss_score}")
+    verdict_benign.pack(fill="both", expand=True)
+
+
+def _update_metrics_panel(ml_score, write_ops, rapid_writes, busy_loops,
+                          network_ops, ioc_items, action_text=None):
+    """Update metrics panel after a scan.
+    ioc_items: list of (name, count, severity) where severity is
+               'critical', 'warning', or 'info'.
+    """
+    ml_conf_var.set(f"{ml_score * 100:.1f}%")
+
+    bar_data = [
+        (ml_score,     1.0),
+        (write_ops,    200.0),
+        (rapid_writes, 10.0),
+        (busy_loops,   20.0),
+        (network_ops,  10.0),
+    ]
+    raw_display = [
+        f"{ml_score:.3f}",
+        str(write_ops),
+        str(rapid_writes),
+        str(busy_loops),
+        str(network_ops),
+    ]
+    for i, ((val, max_val), display) in enumerate(zip(bar_data, raw_display)):
+        bar_value_vars[i].set(display)
+        frac = min(1.0, float(val) / max_val) if max_val > 0 else 0.0
+        bar_fills[i].place(relwidth=frac)
+
+    for w in ioc_badges_frame.winfo_children():
+        w.destroy()
+    if not ioc_items:
+        tk.Label(ioc_badges_frame, text="No indicators triggered",
+                 font=("Segoe UI", 8), fg=TEXT_MUTED, bg=BG_CARD).pack(side="left")
+    else:
+        SEVERITY_STYLE = {
+            "critical": ("#3d0000", DANGER_RED,    "#7a0000"),
+            "warning":  ("#3d1a00", WARN_ORANGE,   "#7a4400"),
+            "info":     (BG_INPUT,  TEXT_MUTED,    BORDER_COLOR),
+        }
+        for name, count, severity in ioc_items:
+            bg_c, fg_c, bd_c = SEVERITY_STYLE.get(severity, SEVERITY_STYLE["info"])
+            chip = tk.Frame(ioc_badges_frame, bg=bg_c,
+                            highlightbackground=bd_c, highlightthickness=1)
+            chip.pack(side="left", padx=(0, 4), pady=2)
+            tk.Label(chip, text=f"{name} ×{count}",
+                     font=("Segoe UI", 8), fg=fg_c, bg=bg_c,
+                     padx=6, pady=2).pack()
+
+    for w in action_status_frame.winfo_children():
+        w.destroy()
+    if action_text:
+        tk.Label(action_status_frame, text=f"✓  {action_text}",
+                 font=("Segoe UI", 9, "bold"), fg=SUCCESS_GREEN,
+                 bg=ACTION_BG, padx=8, pady=4).pack(side="left")
+        action_status_frame.pack(fill="x", pady=(6, 0))
+    else:
+        action_status_frame.pack_forget()
+
+
 def analyze_in_thread(file_path):
     try:
         file_name = os.path.basename(file_path)
         file_size = os.path.getsize(file_path) / 1024
 
+        run_on_ui(file_path_var.set, file_path, wait=True)
         run_on_ui(current_file.set, f"{file_name}\n({file_size:.1f} KB)", wait=True)
-        run_on_ui(set_progress, "Executing in VM analysis runner...", 10, "10% - Running VM runner", wait=True)
+        run_on_ui(set_progress, "Executing behavioral sandbox analysis...", 10, "10% - Running analysis", wait=True)
         run_on_ui(result_var.set, "", wait=True)
-        run_on_ui(result_label.config, bg="#f0f1f4", fg="#6b7280", wait=True)
-        run_on_ui(delete_btn.pack_forget, wait=True)
+        run_on_ui(_hide_verdict_cards, wait=True)
+        run_on_ui(verdict_idle.pack, wait=True)
+        run_on_ui(delete_btn.config, state="disabled", wait=True)
 
         # Known installer names are useful context, but filename alone is not a
         # trustworthy allow-list signal. Continue with analysis either way.
@@ -410,11 +484,10 @@ def analyze_in_thread(file_path):
 
         df = pd.read_csv(LOG_FILE)
         if len(df) == 0 or "event" not in df.columns:
+            _cvss_score, _cvss_label = cvss_severity(0.0)
             run_on_ui(_show_benign, "No activity detected", "BENIGN", "N/A", wait=True)
-            run_on_ui(set_text_widget, metrics_text,
-                "No behavioral events recorded.\n"
-                "File appears benign or exited too quickly.\n"
-            , wait=True)
+            run_on_ui(_show_benign_card, 0.0, _cvss_score, _cvss_label, wait=True)
+            run_on_ui(_update_metrics_panel, 0.0, 0, 0, 0, 0, [], None, wait=True)
             return
 
         # LSTM prediction with enhanced early detection
@@ -504,25 +577,24 @@ def analyze_in_thread(file_path):
                     ioc_lines.append(f"  * {name:<20}: {count} {unit}")
             ioc_section = "\n".join(ioc_lines) if ioc_lines else "  No indicators triggered"
 
-            run_on_ui(set_text_widget, metrics_text,
-                f"Threat Score : {composite:.3f} ({threat_level})"
-                f"   CVSS: {cvss_score} ({cvss_label})\n"
-                f"ML Score     : {prediction:.3f}\n\n"
-                f"Write Ops    : {write_ops}\n"
-                f"Rapid Writes : {rapid_writes}\n"
-                f"Busy Loops   : {busy_loops}\n"
-                f"Network Conn : {network_ops}\n"
-                f"High Entropy : {metrics.get('high_entropy', 0)}\n"
-                f"Canary Hits  : {metrics.get('canary_violations', 0)}\n\n"
-                f"Terminated   : {len(terminated)} processes\n"
-                f"Status       : {'Quarantined' if quarantined else 'Not quarantined'}\n\n"
-                f"IOC INDICATORS\n"
-                f"--------------\n"
-                f"{ioc_section}\n\n"
-                f"CLEANUP\n"
-                f"-------\n"
-                f"{cleanup_section}\n"
-            , wait=True)
+            IOC_SEVERITY = {
+                "CanaryViolation":  "critical",
+                "ShadowCopyDelete": "critical",
+                "RapidFileWrite":   "warning",
+                "HighEntropyFile":  "warning",
+            }
+            ioc_badge_items = []
+            for name, count, unit in ioc_map:
+                if count > 0:
+                    sev = IOC_SEVERITY.get(name, "info")
+                    ioc_badge_items.append((name, count, sev))
+
+            action_str = (f"Process killed · "
+                          f"{'Quarantined' if quarantined else 'Not quarantined'}")
+            run_on_ui(_show_ransomware_card, composite, cvss_score, cvss_label, wait=True)
+            run_on_ui(_update_metrics_panel,
+                      signals['ml_signal'], write_ops, rapid_writes, busy_loops, network_ops,
+                      ioc_badge_items, action_str, wait=True)
 
             if quarantined and quarantine_path:
                 def _delete_permanently(qpath=quarantine_path, fname=file_name):
@@ -536,11 +608,9 @@ def analyze_in_thread(file_path):
                         messagebox.showerror("Error", f"Could not delete: {e}")
                 run_on_ui(delete_btn.config,
                     state="normal",
-                    text="DELETE PERMANENTLY",
                     command=_delete_permanently,
                     wait=True
                 )
-                run_on_ui(delete_btn.pack, pady=8, fill="x", padx=5, wait=True)
 
             if early_result["earliest_alert_window"] is not None:
                 reason = (f"Early detection at call {early_result['earliest_alert_window']} "
@@ -550,10 +620,9 @@ def analyze_in_thread(file_path):
             reason = installer_note + reason
 
             run_on_ui(result_var.set, "RANSOMWARE DETECTED", wait=True)
-            run_on_ui(result_label.config, bg=DANGER_COLOR, fg="white", wait=True)
             run_on_ui(confidence_var.set, f"Score: {composite*100:.1f}% | {threat_level}", wait=True)
             run_on_ui(status_var.set, f"Complete: {reason}", wait=True)
-            run_on_ui(status_label.config, fg=DANGER_COLOR, wait=True)
+            run_on_ui(status_label.config, fg=DANGER_RED, wait=True)
             action = "QUARANTINED" if quarantined else "ALERTED"
             run_on_ui(add_history_entry, file_name, "RANSOMWARE", f"{composite*100:.1f}%", wait=True)
             db.add_analysis(file_name, "RANSOMWARE", composite, prediction,
@@ -579,18 +648,21 @@ def analyze_in_thread(file_path):
                     ioc_lines.append(f"  * {name:<20}: {count} {unit}")
             ioc_section = "\n".join(ioc_lines) if ioc_lines else "  No indicators triggered"
 
-            run_on_ui(set_text_widget, metrics_text,
-                f"Score        : {composite:.3f} (SAFE)"
-                f"   CVSS: {cvss_score} ({cvss_label})\n"
-                f"ML Score     : {prediction:.3f}\n\n"
-                f"Write Ops    : {write_ops}\n"
-                f"Busy Loops   : {busy_loops}\n"
-                f"Network Conn : {network_ops}\n\n"
-                f"FILE SAFE\n\n"
-                f"IOC INDICATORS\n"
-                f"--------------\n"
-                f"{ioc_section}\n"
-            , wait=True)
+            IOC_SEVERITY = {
+                "CanaryViolation":  "critical",
+                "ShadowCopyDelete": "critical",
+                "RapidFileWrite":   "warning",
+                "HighEntropyFile":  "warning",
+            }
+            ioc_badge_items = []
+            for name, count, unit in ioc_map:
+                if count > 0:
+                    sev = IOC_SEVERITY.get(name, "info")
+                    ioc_badge_items.append((name, count, sev))
+            run_on_ui(_show_benign_card, composite, cvss_score, cvss_label, wait=True)
+            run_on_ui(_update_metrics_panel,
+                      signals['ml_signal'], write_ops, rapid_writes, busy_loops, network_ops,
+                      ioc_badge_items, None, wait=True)
             run_on_ui(_show_benign, "Normal application behavior", "BENIGN", f"{composite*100:.1f}%", wait=True)
             db.add_analysis(file_name, "BENIGN FILE", composite, prediction,
                 {'write_ops': write_ops, 'rapid_writes': rapid_writes,
@@ -607,12 +679,13 @@ def analyze_in_thread(file_path):
 
 def _show_benign(reason, history_verdict, history_conf):
     result_var.set("BENIGN FILE")
-    result_label.config(bg=SUCCESS_COLOR, fg="white")
     confidence_var.set(f"Confidence: {history_conf}")
     status_var.set(f"Complete: {reason}")
-    status_label.config(fg=SUCCESS_COLOR)
+    status_label.config(fg=SUCCESS_GREEN)
     progress_var.set(100)
     progress_text_var.set("100% - Complete")
+    prog_info_var.set("100% - Complete")
+    prog_fill.place(relwidth=1.0)
     add_history_entry(
         current_file.get().split("\n")[0],
         history_verdict, history_conf
@@ -634,16 +707,17 @@ def start_analysis():
 
 
 def add_history_entry(filename, verdict, confidence):
-    ts = datetime.now().strftime("%H:%M:%S")
-    entry = f"{ts} | {filename[:28]:28} | {verdict:15} | {confidence}"
-    analysis_history.insert(0, entry)
-    if len(analysis_history) > 10:
+    tag = "ransom" if "RANSOM" in verdict.upper() else "benign"
+    entry = f"  ● {filename[:28]}  [{verdict}]  {confidence}"
+    analysis_history.insert(0, (entry, tag))
+    if len(analysis_history) > 8:
         analysis_history.pop()
     history_text.config(state="normal")
     history_text.delete("1.0", "end")
-    for item in analysis_history:
-        history_text.insert("end", item + "\n")
+    for item, t in analysis_history:
+        history_text.insert("end", item + "   ", t)
     history_text.config(state="disabled")
+    history_count_var.set(f"{len(analysis_history)} scans this session")
 
 
 def refresh_statistics():
@@ -670,7 +744,7 @@ def refresh_statistics():
     for r in recent:
         ts = r['timestamp'].split('.')[0] if r['timestamp'] else "N/A"
         try:
-            score = float(r['ml_score']) if r['ml_score'] is not None else 0.0
+            score = float(r['confidence']) if r['confidence'] is not None else 0.0
         except (ValueError, TypeError):
             score = 0.0
         history_view.insert("end",
@@ -687,7 +761,7 @@ def export_report():
         defaultextension=".csv", filetypes=[("CSV Files", "*.csv")]
     )
     if save_path:
-        with open(save_path, 'w') as f:
+        with open(save_path, 'w', encoding='utf-8') as f:
             f.write(csv_content)
         messagebox.showinfo("Exported", f"Report saved to:\n{save_path}")
 
@@ -707,6 +781,7 @@ def clear_history():
     history_text.delete("1.0", "end")
     history_text.config(state="disabled")
     analysis_history.clear()
+    history_count_var.set("0 scans this session")
     messagebox.showinfo("Cleared", "All history and quarantine records deleted.")
 
 
@@ -737,17 +812,17 @@ def delete_quarantine_file():
     sel_win = tk.Toplevel(root)
     sel_win.title("Delete Quarantined File")
     sel_win.geometry("480x380")
-    sel_win.config(bg="#f8f9fb")
+    sel_win.config(bg=BG_CARD)
     sel_win.transient(root)
     sel_win.grab_set()
 
     tk.Label(sel_win, text="Select file to delete:", font=HEADER_FONT,
-             bg="#f8f9fb", fg="#1f2937").pack(pady=(16, 8))
+             bg=BG_CARD, fg=TEXT_PRIMARY).pack(pady=(16, 8))
 
     listbox = tk.Listbox(sel_win, font=MONO_FONT, height=12, selectmode="single",
-                          bg="#ffffff", fg="#1f2937", relief="flat",
-                          selectbackground="#6366f1", selectforeground="white",
-                          highlightbackground="#e1e4e8", highlightthickness=1)
+                         bg=BG_INPUT, fg=TEXT_PRIMARY, relief="flat",
+                         selectbackground=ACCENT_BLUE, selectforeground="white",
+                         highlightbackground=BORDER_COLOR, highlightthickness=1)
     listbox.pack(fill="both", expand=True, padx=20, pady=4)
 
     for q in quarantine_list:
@@ -777,14 +852,14 @@ def delete_quarantine_file():
         sel_win.destroy()
         show_quarantine()
 
-    btn_frame = tk.Frame(sel_win, bg="#f8f9fb")
+    btn_frame = tk.Frame(sel_win, bg=BG_CARD)
     btn_frame.pack(fill="x", padx=20, pady=14)
     tk.Button(btn_frame, text="DELETE", font=BTN_FONT, bg=DANGER_COLOR,
               fg="white", command=_do_delete, padx=18, pady=8,
               border=0, cursor="hand2", activebackground="#dc2626").pack(side="left", padx=4)
-    tk.Button(btn_frame, text="Cancel", font=BTN_FONT, bg="#d1d5db",
-              fg="#374151", command=sel_win.destroy, padx=18, pady=8,
-              border=0, cursor="hand2", activebackground="#b8bcc4").pack(side="right", padx=4)
+    tk.Button(btn_frame, text="Cancel", font=BTN_FONT, bg=BG_INPUT,
+              fg=TEXT_MUTED, command=sel_win.destroy, padx=18, pady=8,
+              border=0, cursor="hand2", activebackground=BORDER_COLOR).pack(side="right", padx=4)
 
 
 # ── GUI ────────────────────────────────────────────────────────────────────────
@@ -793,23 +868,42 @@ root.title("Ransomware Detection System")
 root.geometry("1120x860")
 root.resizable(True, True)
 
-# ── THEME PALETTE (Light) ──────────────────────────────────────────────────────
-BG_DARK         = "#f3f4f6"      # main background
-SURFACE         = "#ffffff"      # cards / panels
-SURFACE_LIGHT   = "#f0f1f4"      # inset areas
-BORDER_COLOR    = "#e1e4e8"      # subtle borders
-PRIMARY_COLOR   = "#6366f1"      # indigo accent
-SECONDARY_COLOR = "#818cf8"      # lighter indigo
-SUCCESS_COLOR   = "#16a34a"      # green
-DANGER_COLOR    = "#dc2626"      # red
-WARNING_COLOR   = "#d97706"      # amber
-BG_COLOR        = "#f3f4f6"
-DARK_TEXT        = "#1f2937"      # dark text
-LIGHT_TEXT       = "#6b7280"      # muted text
-INPUT_BG         = "#f9fafb"      # input / text area bg
-HEADER_BG        = "#1e293b"      # dark header / footer
+# ── THEME PALETTE (Dark / Cyber) ──────────────────────────────────────────────
+BG_DEEP         = "#0d1117"   # window background
+BG_CARD         = "#161b22"   # card / panel backgrounds
+BG_INPUT        = "#21262d"   # input fields, progress track
+BORDER_COLOR    = "#30363d"   # all card/panel borders
+TEXT_PRIMARY    = "#e6edf3"   # primary text
+TEXT_MUTED      = "#8b949e"   # labels, secondary text
+ACCENT_BLUE     = "#58a6ff"   # accent, links
+DANGER_RED      = "#ff4444"   # ransomware verdict, critical IOCs
+WARN_ORANGE     = "#ffa500"   # warning IOCs
+SUCCESS_GREEN   = "#3fb950"   # benign verdict, quarantine confirmed
+BTN_BLUE        = "#1f6feb"   # primary action button fill
+BTN_BLUE_BORDER = "#388bfd"
+DANGER_DARK     = "#1a0000"   # ransomware card background
+RANSOM_INNER    = "#2a0000"      # inner accent in ransomware card
+SUCCESS_DARK    = "#0f3d1f"      # benign card background
+BENIGN_INNER    = "#0a2a12"      # inner accent in benign card
+ACTION_BG       = "#0f1f0f"      # action status row background
+ACTION_BORDER   = "#238636"      # action status row border
 
-root.config(bg=BG_DARK)
+# Aliases kept so existing references compile unchanged
+BG_DARK         = BG_DEEP
+SURFACE         = BG_CARD
+SURFACE_LIGHT   = BG_INPUT
+PRIMARY_COLOR   = ACCENT_BLUE
+SECONDARY_COLOR = ACCENT_BLUE
+SUCCESS_COLOR   = SUCCESS_GREEN
+DANGER_COLOR    = DANGER_RED
+WARNING_COLOR   = WARN_ORANGE
+BG_COLOR        = BG_DEEP
+DARK_TEXT       = TEXT_PRIMARY
+LIGHT_TEXT      = TEXT_MUTED
+INPUT_BG        = BG_INPUT
+HEADER_BG       = BG_CARD
+
+root.config(bg=BG_DEEP)
 
 TITLE_FONT  = ("Segoe UI", 18, "bold")
 HEADER_FONT = ("Segoe UI", 12, "bold")
@@ -849,201 +943,320 @@ analysis_history  = []
 # ── TTK STYLES ─────────────────────────────────────────────────────────────────
 style = ttk.Style()
 style.theme_use("clam")
-style.configure("TNotebook", background=BG_DARK, borderwidth=0)
-style.configure("TNotebook.Tab", background="#e5e7eb", foreground=LIGHT_TEXT,
+style.configure("TNotebook", background=BG_DEEP, borderwidth=0)
+style.configure("TNotebook.Tab", background=BG_CARD, foreground=TEXT_MUTED,
                 padding=[18, 10], font=BTN_FONT, borderwidth=0)
 style.map("TNotebook.Tab",
-           background=[("selected", SURFACE)],
-           foreground=[("selected", "#1f2937")])
+          background=[("selected", BG_DEEP)],
+          foreground=[("selected", ACCENT_BLUE)])
 style.configure("Custom.Horizontal.TProgressbar",
-                background=PRIMARY_COLOR, troughcolor=SURFACE_LIGHT,
+                background=ACCENT_BLUE, troughcolor=BG_INPUT,
                 borderwidth=0, thickness=8)
 
 # ── HEADER ─────────────────────────────────────────────────────────────────────
-header = tk.Frame(root, bg=HEADER_BG, height=72)
+header = tk.Frame(root, bg=BG_CARD, height=52)
 header.pack(fill="x")
 header.pack_propagate(False)
-tk.Frame(root, bg=PRIMARY_COLOR, height=3).pack(fill="x")  # accent stripe
+tk.Frame(root, bg=BORDER_COLOR, height=1).pack(fill="x")
 
-hf = tk.Frame(header, bg=HEADER_BG)
-hf.pack(fill="both", expand=True, padx=28)
+hf = tk.Frame(header, bg=BG_CARD)
+hf.pack(fill="both", expand=True, padx=20)
 
-title_f = tk.Frame(hf, bg=HEADER_BG)
-title_f.pack(side="left", fill="y", pady=10)
-tk.Label(title_f, text="*", font=("Segoe UI", 22), fg="#818cf8",
-         bg=HEADER_BG).pack(side="left", padx=(0, 12))
-ti = tk.Frame(title_f, bg=HEADER_BG)
-ti.pack(side="left")
-tk.Label(ti, text="RANSOMWARE DETECTION", font=("Segoe UI", 15, "bold"),
-         fg="#f1f5f9", bg=HEADER_BG).pack(anchor="w")
-tk.Label(ti, text="Advanced Behavioral Analysis Engine", font=("Segoe UI", 9),
-         fg="#94a3b8", bg=HEADER_BG).pack(anchor="w")
+title_f = tk.Frame(hf, bg=BG_CARD)
+title_f.pack(side="left", fill="y", pady=8)
+tk.Label(title_f, text="●", font=("Segoe UI", 10), fg=DANGER_RED,
+         bg=BG_CARD).pack(side="left", padx=(0, 8))
+tk.Label(title_f, text="RANSOMWARE DETECTION SYSTEM",
+         font=("Segoe UI", 11, "bold"), fg=ACCENT_BLUE, bg=BG_CARD).pack(side="left")
 
-si = tk.Frame(hf, bg=HEADER_BG)
-si.pack(side="right", pady=10)
-tk.Label(si, text="*", font=("Segoe UI", 8), fg=SUCCESS_COLOR,
-         bg=HEADER_BG).pack(side="left", padx=(0, 5))
-tk.Label(si, text="Model Active", font=SMALL_FONT, fg="#94a3b8",
-         bg=HEADER_BG).pack(side="left")
+si = tk.Frame(hf, bg=BG_CARD)
+si.pack(side="right", pady=8)
+active_bg = tk.Frame(si, bg=SUCCESS_DARK, padx=8, pady=2)
+active_bg.pack(side="right")
+tk.Label(active_bg, text="● ACTIVE", font=("Segoe UI", 9, "bold"),
+         fg=SUCCESS_GREEN, bg=SUCCESS_DARK).pack()
 
 # ── NOTEBOOK ───────────────────────────────────────────────────────────────────
 notebook = ttk.Notebook(root)
 notebook.pack(fill="both", expand=True, padx=14, pady=(14, 0))
 
 # ── TAB 1: ANALYSIS ───────────────────────────────────────────────────────────
-at = tk.Frame(notebook, bg=BG_DARK)
+at = tk.Frame(notebook, bg=BG_DEEP)
 notebook.add(at, text="  Analysis  ")
-ac = tk.Frame(at, bg=BG_DARK)
-ac.pack(fill="both", expand=True, padx=8, pady=10)
+ac = tk.Frame(at, bg=BG_DEEP)
+ac.pack(fill="both", expand=True, padx=12, pady=10)
 
-# Left panel
-lp = tk.Frame(ac, bg=SURFACE, highlightbackground=BORDER_COLOR, highlightthickness=1)
-lp.pack(side="left", fill="both", expand=True, padx=(0, 6))
+# ── File row ──────────────────────────────────────────────────────────────────
+file_row = tk.Frame(ac, bg=BG_DEEP)
+file_row.pack(fill="x", pady=(0, 8))
 
-# File Selection
-fs_hdr = tk.Frame(lp, bg=SURFACE)
-fs_hdr.pack(fill="x", padx=18, pady=(18, 0))
-tk.Label(fs_hdr, text="FILE SELECTION", font=("Segoe UI", 10, "bold"),
-         fg=LIGHT_TEXT, bg=SURFACE).pack(anchor="w")
-tk.Frame(fs_hdr, bg=BORDER_COLOR, height=1).pack(fill="x", pady=(6, 0))
+file_path_var = tk.StringVar(value="No file selected")
+path_entry = tk.Entry(file_row, textvariable=file_path_var, font=MONO_FONT,
+                      bg=BG_CARD, fg=TEXT_PRIMARY, insertbackground=TEXT_PRIMARY,
+                      relief="flat", bd=0, highlightbackground=BORDER_COLOR,
+                      highlightthickness=1, readonlybackground=BG_CARD,
+                      state="readonly")
+path_entry.pack(side="left", fill="x", expand=True, ipady=7, padx=(0, 6))
 
-fs = tk.Frame(lp, bg=SURFACE)
-fs.pack(fill="x", padx=18, pady=(8, 4))
-tk.Label(fs, textvariable=current_file, font=SMALL_FONT, fg=LIGHT_TEXT,
-         bg=SURFACE, wraplength=260).pack(pady=6)
-scan_btn = tk.Button(fs, text="SELECT FILE & ANALYZE", font=BTN_FONT,
-                     bg=PRIMARY_COLOR, fg="white", padx=22, pady=11,
-                     border=0, cursor="hand2", command=start_analysis,
-                     activebackground=_lit(PRIMARY_COLOR), activeforeground="white")
-_hover(scan_btn, _lit(PRIMARY_COLOR), PRIMARY_COLOR)
-scan_btn.pack(pady=(4, 8), fill="x")
+browse_btn = tk.Button(file_row, text="Browse", font=BTN_FONT,
+                       bg=BG_INPUT, fg=TEXT_PRIMARY, padx=14, pady=7,
+                       border=0, cursor="hand2",
+                       activebackground=BORDER_COLOR, activeforeground=TEXT_PRIMARY,
+                       highlightbackground=BORDER_COLOR, highlightthickness=1,
+                       command=start_analysis)
+browse_btn.pack(side="left", padx=(0, 6))
 
-# Status
-st_hdr = tk.Frame(lp, bg=SURFACE)
-st_hdr.pack(fill="x", padx=18, pady=(12, 0))
-tk.Label(st_hdr, text="STATUS", font=("Segoe UI", 10, "bold"),
-         fg=LIGHT_TEXT, bg=SURFACE).pack(anchor="w")
-tk.Frame(st_hdr, bg=BORDER_COLOR, height=1).pack(fill="x", pady=(6, 0))
+scan_btn = tk.Button(file_row, text="Scan", font=("Segoe UI", 10, "bold"),
+                     bg=BTN_BLUE, fg="white", padx=20, pady=7,
+                     border=0, cursor="hand2",
+                     activebackground=BTN_BLUE_BORDER, activeforeground="white",
+                     command=start_analysis)
+scan_btn.pack(side="left")
 
-ss = tk.Frame(lp, bg=SURFACE)
-ss.pack(fill="x", padx=18, pady=(8, 4))
-status_label = tk.Label(ss, textvariable=status_var, font=TEXT_FONT,
-                         fg=LIGHT_TEXT, bg=SURFACE, wraplength=260, justify="left")
-status_label.pack(anchor="w", pady=4)
-ttk.Progressbar(ss, variable=progress_var, maximum=100, length=260,
-                 mode="determinate", style="Custom.Horizontal.TProgressbar"
-                 ).pack(fill="x", pady=6)
-tk.Label(ss, textvariable=progress_text_var, font=SMALL_FONT,
-         fg=LIGHT_TEXT, bg=SURFACE).pack(pady=2)
+# ── Progress bar card ─────────────────────────────────────────────────────────
+prog_card = tk.Frame(ac, bg=BG_CARD, highlightbackground=BORDER_COLOR,
+                     highlightthickness=1)
+prog_card.pack(fill="x", pady=(0, 8))
 
-# Result
-rs_hdr = tk.Frame(lp, bg=SURFACE)
-rs_hdr.pack(fill="x", padx=18, pady=(12, 0))
-tk.Label(rs_hdr, text="DETECTION RESULT", font=("Segoe UI", 10, "bold"),
-         fg=LIGHT_TEXT, bg=SURFACE).pack(anchor="w")
-tk.Frame(rs_hdr, bg=BORDER_COLOR, height=1).pack(fill="x", pady=(6, 0))
+prog_inner = tk.Frame(prog_card, bg=BG_CARD)
+prog_inner.pack(fill="x", padx=14, pady=8)
 
-vs = tk.Frame(lp, bg=SURFACE)
-vs.pack(fill="x", padx=18, pady=(8, 18))
-result_label = tk.Label(vs, textvariable=result_var,
-                         font=("Segoe UI", 16, "bold"), height=2,
-                         bg=SURFACE_LIGHT, fg=LIGHT_TEXT, relief="flat")
-result_label.pack(pady=8, fill="x")
-tk.Label(vs, textvariable=confidence_var, font=TEXT_FONT,
-         fg=LIGHT_TEXT, bg=SURFACE).pack(pady=2)
-delete_btn = tk.Button(vs, text="DELETE PERMANENTLY", font=BTN_FONT,
-                        bg=DANGER_COLOR, fg="white", state="disabled",
-                        padx=16, pady=8, border=0, cursor="hand2",
-                        activebackground="#dc2626")
+prog_label_row = tk.Frame(prog_inner, bg=BG_CARD)
+prog_label_row.pack(fill="x", pady=(0, 4))
+tk.Label(prog_label_row, text="Behavioral Analysis", font=("Segoe UI", 9),
+         fg=TEXT_MUTED, bg=BG_CARD).pack(side="left")
+prog_info_var = tk.StringVar(value="")
+tk.Label(prog_label_row, textvariable=prog_info_var, font=("Segoe UI", 9),
+         fg=ACCENT_BLUE, bg=BG_CARD).pack(side="right")
 
-# Right panel — Behavioral Metrics
-rp = tk.Frame(ac, bg=SURFACE, highlightbackground=BORDER_COLOR, highlightthickness=1)
-rp.pack(side="right", fill="both", expand=True, padx=(6, 0))
+prog_track = tk.Frame(prog_inner, bg=BG_INPUT, height=5)
+prog_track.pack(fill="x")
+prog_track.pack_propagate(False)
+prog_fill = tk.Frame(prog_track, bg=ACCENT_BLUE, height=5)
+prog_fill.place(x=0, y=0, relheight=1.0, relwidth=0.0)
 
-ms_hdr = tk.Frame(rp, bg=SURFACE)
-ms_hdr.pack(fill="x", padx=18, pady=(18, 0))
-tk.Label(ms_hdr, text="BEHAVIORAL METRICS", font=("Segoe UI", 10, "bold"),
-         fg=LIGHT_TEXT, bg=SURFACE).pack(anchor="w")
-tk.Frame(ms_hdr, bg=BORDER_COLOR, height=1).pack(fill="x", pady=(6, 0))
+status_label = tk.Label(prog_inner, textvariable=status_var, font=("Segoe UI", 9),
+                        fg=TEXT_MUTED, bg=BG_CARD, anchor="w")
+status_label.pack(fill="x", pady=(3, 0))
 
-ms = tk.Frame(rp, bg=SURFACE)
-ms.pack(fill="both", expand=True, padx=18, pady=(8, 18))
-metrics_text = tk.Text(ms, font=MONO_FONT, height=18, width=36,
-                        state="disabled", wrap="word", bg=INPUT_BG, fg="#1f2937",
-                        relief="flat", padx=10, pady=10, insertbackground="#1f2937",
-                        highlightbackground=BORDER_COLOR, highlightthickness=1)
-metrics_text.pack(fill="both", expand=True)
+# ── Result row: verdict card (left) + metrics panel (right) ───────────────────
+result_row = tk.Frame(ac, bg=BG_DEEP)
+result_row.pack(fill="both", expand=True)
+
+# Verdict card ─────────────────────────────────────────────────────────────────
+verdict_outer = tk.Frame(result_row, bg=BG_DEEP, width=170)
+verdict_outer.pack(side="left", fill="y", padx=(0, 8))
+verdict_outer.pack_propagate(False)
+
+# Idle placeholder (shown before first scan)
+verdict_idle = tk.Frame(verdict_outer, bg=BG_CARD, highlightbackground=BORDER_COLOR,
+                        highlightthickness=1)
+verdict_idle.pack(fill="both", expand=True)
+tk.Label(verdict_idle, text="No scan\nyet", font=("Segoe UI", 10),
+         fg=TEXT_MUTED, bg=BG_CARD, justify="center").pack(expand=True)
+
+# Ransomware card (hidden until ransomware detected)
+verdict_ransom = tk.Frame(verdict_outer, bg=DANGER_DARK,
+                          highlightbackground=DANGER_RED, highlightthickness=1)
+vr = tk.Frame(verdict_ransom, bg=DANGER_DARK)
+vr.pack(fill="both", expand=True, padx=10, pady=10)
+tk.Label(vr, text="⚠", font=("Segoe UI", 20), fg=DANGER_RED,
+         bg=DANGER_DARK).pack(pady=(0, 2))
+tk.Label(vr, text="RANSOMWARE", font=("Segoe UI", 9, "bold"),
+         fg=DANGER_RED, bg=DANGER_DARK).pack()
+tk.Label(vr, text="DETECTED", font=("Segoe UI", 8),
+         fg="#aa3333", bg=DANGER_DARK).pack(pady=(0, 8))
+vr_score_frame = tk.Frame(vr, bg=RANSOM_INNER)
+vr_score_frame.pack(fill="x", pady=(0, 4))
+tk.Label(vr_score_frame, text="THREAT SCORE", font=("Segoe UI", 7),
+         fg=TEXT_MUTED, bg=RANSOM_INNER).pack(pady=(4, 0))
+verdict_score_var = tk.StringVar(value="0.000")
+tk.Label(vr_score_frame, textvariable=verdict_score_var,
+         font=("Segoe UI", 16, "bold"), fg=DANGER_RED, bg=RANSOM_INNER).pack(pady=(0, 4))
+vr_cvss_frame = tk.Frame(vr, bg=RANSOM_INNER)
+vr_cvss_frame.pack(fill="x", pady=(0, 8))
+verdict_cvss_var = tk.StringVar(value="CVSS -")
+tk.Label(vr_cvss_frame, textvariable=verdict_cvss_var,
+         font=("Segoe UI", 9, "bold"), fg=WARN_ORANGE, bg=RANSOM_INNER).pack(pady=2)
+verdict_severity_var = tk.StringVar(value="")
+tk.Label(vr_cvss_frame, textvariable=verdict_severity_var,
+         font=("Segoe UI", 8), fg=DANGER_RED, bg=RANSOM_INNER).pack(pady=(0, 4))
+quarantine_btn = tk.Button(vr, text="QUARANTINE", font=("Segoe UI", 8, "bold"),
+                           bg=BG_CARD, fg=ACCENT_BLUE, padx=6, pady=4,
+                           border=0, cursor="hand2",
+                           activebackground=BG_INPUT, activeforeground=ACCENT_BLUE)
+quarantine_btn.pack(fill="x", pady=(0, 3))
+delete_btn = tk.Button(vr, text="DELETE", font=("Segoe UI", 8, "bold"),
+                       bg=DANGER_DARK, fg=DANGER_RED, padx=6, pady=4,
+                       border=0, cursor="hand2", state="disabled",
+                       highlightbackground=DANGER_RED, highlightthickness=1,
+                       activebackground=RANSOM_INNER, activeforeground=DANGER_RED)
+delete_btn.pack(fill="x")
+
+# Benign card (hidden until benign result)
+verdict_benign = tk.Frame(verdict_outer, bg=SUCCESS_DARK,
+                          highlightbackground=SUCCESS_GREEN, highlightthickness=1)
+vb = tk.Frame(verdict_benign, bg=SUCCESS_DARK)
+vb.pack(fill="both", expand=True, padx=10, pady=10)
+tk.Label(vb, text="✓", font=("Segoe UI", 20), fg=SUCCESS_GREEN,
+         bg=SUCCESS_DARK).pack(pady=(0, 2))
+tk.Label(vb, text="SAFE", font=("Segoe UI", 9, "bold"),
+         fg=SUCCESS_GREEN, bg=SUCCESS_DARK).pack()
+tk.Label(vb, text="BENIGN", font=("Segoe UI", 8),
+         fg="#267a3a", bg=SUCCESS_DARK).pack(pady=(0, 8))
+vb_score_frame = tk.Frame(vb, bg=BENIGN_INNER)
+vb_score_frame.pack(fill="x", pady=(0, 4))
+tk.Label(vb_score_frame, text="THREAT SCORE", font=("Segoe UI", 7),
+         fg=TEXT_MUTED, bg=BENIGN_INNER).pack(pady=(4, 0))
+benign_score_var = tk.StringVar(value="0.000")
+tk.Label(vb_score_frame, textvariable=benign_score_var,
+         font=("Segoe UI", 16, "bold"), fg=SUCCESS_GREEN, bg=BENIGN_INNER).pack(pady=(0, 4))
+vb_cvss_frame = tk.Frame(vb, bg=BENIGN_INNER)
+vb_cvss_frame.pack(fill="x")
+benign_cvss_var = tk.StringVar(value="CVSS -")
+tk.Label(vb_cvss_frame, textvariable=benign_cvss_var,
+         font=("Segoe UI", 9, "bold"), fg=SUCCESS_GREEN, bg=BENIGN_INNER).pack(pady=4)
+
+# Metrics panel ────────────────────────────────────────────────────────────────
+metrics_outer = tk.Frame(result_row, bg=BG_CARD,
+                         highlightbackground=BORDER_COLOR, highlightthickness=1)
+metrics_outer.pack(side="left", fill="both", expand=True)
+mp = tk.Frame(metrics_outer, bg=BG_CARD)
+mp.pack(fill="both", expand=True, padx=14, pady=10)
+
+# ML confidence header row
+ml_hdr = tk.Frame(mp, bg=BG_CARD)
+ml_hdr.pack(fill="x", pady=(0, 8))
+tk.Label(ml_hdr, text="ML Confidence", font=("Segoe UI", 9),
+         fg=TEXT_MUTED, bg=BG_CARD).pack(side="left")
+ml_conf_var = tk.StringVar(value="-")
+tk.Label(ml_hdr, textvariable=ml_conf_var,
+         font=("Segoe UI", 13, "bold"), fg=DANGER_RED, bg=BG_CARD).pack(side="right")
+
+# Progress bars
+BAR_DEFS = [
+    ("ML Score",     DANGER_RED),
+    ("Write Ops",    WARN_ORANGE),
+    ("Rapid Writes", WARN_ORANGE),
+    ("Busy Loops",   ACCENT_BLUE),
+    ("Network Conn", ACCENT_BLUE),
+]
+bar_value_vars = []
+bar_fills = []
+for label_text, bar_color in BAR_DEFS:
+    brow = tk.Frame(mp, bg=BG_CARD)
+    brow.pack(fill="x", pady=2)
+    bl = tk.Frame(brow, bg=BG_CARD)
+    bl.pack(fill="x", pady=(0, 2))
+    tk.Label(bl, text=label_text, font=("Segoe UI", 8),
+             fg=TEXT_MUTED, bg=BG_CARD).pack(side="left")
+    val_var = tk.StringVar(value="-")
+    bar_value_vars.append(val_var)
+    tk.Label(bl, textvariable=val_var, font=("Segoe UI", 8),
+             fg=bar_color, bg=BG_CARD).pack(side="right")
+    track = tk.Frame(brow, bg=BG_INPUT, height=4)
+    track.pack(fill="x")
+    track.pack_propagate(False)
+    fill = tk.Frame(track, bg=bar_color, height=4)
+    fill.place(x=0, y=0, relheight=1.0, relwidth=0.0)
+    bar_fills.append(fill)
+
+# Divider
+tk.Frame(mp, bg=BORDER_COLOR, height=1).pack(fill="x", pady=8)
+
+# IOC badges container
+ioc_label_row = tk.Frame(mp, bg=BG_CARD)
+ioc_label_row.pack(fill="x", pady=(0, 4))
+tk.Label(ioc_label_row, text="IOC INDICATORS", font=("Segoe UI", 8, "bold"),
+         fg=TEXT_MUTED, bg=BG_CARD).pack(side="left")
+ioc_badges_frame = tk.Frame(mp, bg=BG_CARD)
+ioc_badges_frame.pack(fill="x")
+tk.Label(ioc_badges_frame, text="No scan yet", font=("Segoe UI", 8),
+         fg=TEXT_MUTED, bg=BG_CARD).pack(side="left")
+
+# Action status row (shown after ransomware result)
+action_status_frame = tk.Frame(mp, bg=ACTION_BG,
+                               highlightbackground=ACTION_BORDER, highlightthickness=1)
+action_status_var = tk.StringVar(value="")
+
+# Dummy metrics_text widget (kept for backward compat with any stray references)
+metrics_text = tk.Text(mp, height=1, width=1, state="disabled")
+metrics_text.pack_forget()
 
 # ── TAB 2: STATISTICS ─────────────────────────────────────────────────────────
-st_tab = tk.Frame(notebook, bg=BG_DARK)
+st_tab = tk.Frame(notebook, bg=BG_DEEP)
 notebook.add(st_tab, text="  Statistics  ")
-sc = tk.Frame(st_tab, bg=BG_DARK)
+sc = tk.Frame(st_tab, bg=BG_DEEP)
 sc.pack(fill="both", expand=True, padx=14, pady=14)
 
-stats_card = tk.Frame(sc, bg=SURFACE, highlightbackground=BORDER_COLOR, highlightthickness=1)
+stats_card = tk.Frame(sc, bg=BG_CARD, highlightbackground=BORDER_COLOR, highlightthickness=1)
 stats_card.pack(fill="x", pady=(0, 10))
 tk.Label(stats_card, text="OVERVIEW", font=("Segoe UI", 10, "bold"),
-         fg=LIGHT_TEXT, bg=SURFACE).pack(anchor="w", padx=16, pady=(14, 0))
+         fg=TEXT_MUTED, bg=BG_CARD).pack(anchor="w", padx=16, pady=(14, 0))
 tk.Frame(stats_card, bg=BORDER_COLOR, height=1).pack(fill="x", padx=16, pady=(6, 0))
 stats_text = tk.Text(stats_card, font=MONO_FONT, height=6, wrap="word",
-                      bg=INPUT_BG, fg="#1f2937", relief="flat", padx=12, pady=10,
-                      state="disabled", highlightbackground=BORDER_COLOR,
-                      highlightthickness=1)
+                     bg=BG_INPUT, fg=TEXT_PRIMARY, relief="flat", padx=12, pady=10,
+                     state="disabled", highlightbackground=BORDER_COLOR,
+                     highlightthickness=1)
 stats_text.pack(fill="x", padx=16, pady=(8, 16))
 
-br = tk.Frame(sc, bg=BG_DARK)
+br = tk.Frame(sc, bg=BG_DEEP)
 br.pack(fill="x", pady=6)
-_btn(br, "Refresh", SECONDARY_COLOR, refresh_statistics, side="left", padx=4)
-_btn(br, "Export CSV", WARNING_COLOR, export_report, side="left", padx=4)
-_btn(br, "Clear History", DANGER_COLOR, clear_history, side="left", padx=4)
+_btn(br, "Refresh", ACCENT_BLUE, refresh_statistics, side="left", padx=4)
+_btn(br, "Export CSV", WARN_ORANGE, export_report, side="left", padx=4)
+_btn(br, "Clear History", DANGER_RED, clear_history, side="left", padx=4)
 
-hist_card = tk.Frame(sc, bg=SURFACE, highlightbackground=BORDER_COLOR, highlightthickness=1)
+hist_card = tk.Frame(sc, bg=BG_CARD, highlightbackground=BORDER_COLOR, highlightthickness=1)
 hist_card.pack(fill="both", expand=True, pady=(6, 0))
 tk.Label(hist_card, text="ANALYSIS HISTORY", font=("Segoe UI", 10, "bold"),
-         fg=LIGHT_TEXT, bg=SURFACE).pack(anchor="w", padx=16, pady=(14, 0))
+         fg=TEXT_MUTED, bg=BG_CARD).pack(anchor="w", padx=16, pady=(14, 0))
 tk.Frame(hist_card, bg=BORDER_COLOR, height=1).pack(fill="x", padx=16, pady=(6, 0))
 history_view = tk.Text(hist_card, font=MONO_FONT, height=16, wrap="word",
-                        bg=INPUT_BG, fg="#1f2937", relief="flat", padx=12, pady=10,
-                        state="disabled", highlightbackground=BORDER_COLOR,
-                        highlightthickness=1)
+                       bg=BG_INPUT, fg=TEXT_PRIMARY, relief="flat", padx=12, pady=10,
+                       state="disabled", highlightbackground=BORDER_COLOR,
+                       highlightthickness=1)
 history_view.pack(fill="both", expand=True, padx=16, pady=(8, 16))
 
 # ── TAB 3: QUARANTINE ─────────────────────────────────────────────────────────
-qt_tab = tk.Frame(notebook, bg=BG_DARK)
+qt_tab = tk.Frame(notebook, bg=BG_DEEP)
 notebook.add(qt_tab, text="  Quarantine  ")
-qc = tk.Frame(qt_tab, bg=BG_DARK)
+qc = tk.Frame(qt_tab, bg=BG_DEEP)
 qc.pack(fill="both", expand=True, padx=14, pady=14)
 
-qbr = tk.Frame(qc, bg=BG_DARK)
+qbr = tk.Frame(qc, bg=BG_DEEP)
 qbr.pack(fill="x", pady=(0, 10))
-_btn(qbr, "Refresh", SECONDARY_COLOR, show_quarantine, side="left", padx=4)
-_btn(qbr, "Delete File", DANGER_COLOR, delete_quarantine_file, side="left", padx=4)
+_btn(qbr, "Refresh", ACCENT_BLUE, show_quarantine, side="left", padx=4)
+_btn(qbr, "Delete File", DANGER_RED, delete_quarantine_file, side="left", padx=4)
 
-q_card = tk.Frame(qc, bg=SURFACE, highlightbackground=BORDER_COLOR, highlightthickness=1)
+q_card = tk.Frame(qc, bg=BG_CARD, highlightbackground=BORDER_COLOR, highlightthickness=1)
 q_card.pack(fill="both", expand=True)
 tk.Label(q_card, text="QUARANTINED FILES", font=("Segoe UI", 10, "bold"),
-         fg=LIGHT_TEXT, bg=SURFACE).pack(anchor="w", padx=16, pady=(14, 0))
+         fg=TEXT_MUTED, bg=BG_CARD).pack(anchor="w", padx=16, pady=(14, 0))
 tk.Frame(q_card, bg=BORDER_COLOR, height=1).pack(fill="x", padx=16, pady=(6, 0))
 quarantine_view = tk.Text(q_card, font=MONO_FONT, height=20, wrap="word",
-                           bg=INPUT_BG, fg="#1f2937", relief="flat", padx=12, pady=10,
-                           state="disabled", highlightbackground=BORDER_COLOR,
-                           highlightthickness=1)
+                          bg=BG_INPUT, fg=TEXT_PRIMARY, relief="flat", padx=12, pady=10,
+                          state="disabled", highlightbackground=BORDER_COLOR,
+                          highlightthickness=1)
 quarantine_view.pack(fill="both", expand=True, padx=16, pady=(8, 16))
 
 # ── FOOTER: SESSION HISTORY ───────────────────────────────────────────────────
-footer = tk.Frame(root, bg=HEADER_BG)
+tk.Frame(root, bg=BORDER_COLOR, height=1).pack(fill="x", side="bottom")
+footer = tk.Frame(root, bg=BG_CARD)
 footer.pack(fill="x", side="bottom")
-tk.Frame(root, bg=PRIMARY_COLOR, height=2).pack(fill="x", side="bottom")  # accent stripe
-fh = tk.Frame(footer, bg=HEADER_BG)
-fh.pack(fill="x", padx=20, pady=(10, 0))
-tk.Label(fh, text="SESSION HISTORY", font=("Segoe UI", 10, "bold"),
-         fg="#94a3b8", bg=HEADER_BG).pack(anchor="w")
-tk.Frame(fh, bg="#334155", height=1).pack(fill="x", pady=(6, 0))
-history_text = tk.Text(footer, font=MONO_FONT, height=3, width=110,
-                        state="disabled", wrap="word", bg="#0f172a", fg="#cbd5e1",
-                        relief="flat", padx=10, pady=8, highlightbackground="#334155",
-                        highlightthickness=1)
-history_text.pack(fill="both", expand=True, padx=20, pady=(8, 12))
+fh = tk.Frame(footer, bg=BG_CARD)
+fh.pack(fill="x", padx=20, pady=(8, 0))
+tk.Label(fh, text="SCAN HISTORY", font=("Segoe UI", 8, "bold"),
+         fg=TEXT_MUTED, bg=BG_CARD).pack(side="left")
+history_count_var = tk.StringVar(value="0 scans this session")
+tk.Label(fh, textvariable=history_count_var, font=("Segoe UI", 8),
+         fg=TEXT_MUTED, bg=BG_CARD).pack(side="right")
+history_text = tk.Text(footer, font=MONO_FONT, height=2, width=110,
+                       state="disabled", wrap="none", bg=BG_CARD, fg=TEXT_PRIMARY,
+                       relief="flat", padx=10, pady=6,
+                       highlightbackground=BORDER_COLOR, highlightthickness=0)
+history_text.pack(fill="x", expand=False, padx=20, pady=(4, 10))
+history_text.tag_configure("ransom", foreground=DANGER_RED)
+history_text.tag_configure("benign", foreground=SUCCESS_GREEN)
 
 refresh_statistics()
 show_quarantine()
